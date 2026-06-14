@@ -1,0 +1,19 @@
+# ForgeSight — submission reproducibility. The stateful backend (graph, tools, RAG) runs as an
+# always-on container; Postgres/Auth/Realtime is Supabase cloud, Ollama serves the SLM on the host.
+# See forgesight-v3-final.md §1.12 (the honest deployment split).
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      # Reach Ollama running on the host (Docker Desktop maps host.docker.internal).
+      OLLAMA_HOST: http://host.docker.internal:11434
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+# Note: a backend/Dockerfile is added in the deployment pass (Phase 6). Supabase + Ollama are
+# external by design — Vercel-style serverless cannot host the scheduler/SLM/warm models.

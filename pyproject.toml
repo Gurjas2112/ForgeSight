@@ -1,0 +1,59 @@
+[project]
+name = "forgesight"
+version = "0.1.0"
+description = "ForgeSight — governed multi-agent maintenance decision-support (Tata Steel AI Hackathon 2026)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # --- web / api ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    # --- db ---
+    "psycopg[binary,pool]>=3.2",
+    # --- agent runtime ---
+    "langgraph>=0.2.50",
+    "langgraph-checkpoint-postgres>=2.0",
+    "langchain-core>=0.3",
+    "langchain-ollama>=0.2",
+    "langchain-text-splitters>=0.3",
+    "ollama>=0.4",
+    # --- data / ml (Phase 1 foundation; ml notebooks add their own) ---
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "ucimlrepo>=0.0.7",
+    "requests>=2.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.7",
+]
+ml = [
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "shap>=0.46",
+    "joblib>=1.4",
+    "matplotlib>=3.9",
+]
+corpus = [
+    "pymupdf>=1.24",
+    "langchain-community>=0.3",
+    "firecrawl-py>=1.5",
+]
+
+[tool.setuptools]
+# Source lives under backend/, data/, scripts/ — treat as a flat workspace, not a package.
+py-modules = []
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
