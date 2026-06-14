@@ -1,0 +1,14 @@
+# ForgeSight fine-tuned SLM — Ollama Modelfile.
+# After train_qlora.py exports the GGUF:
+#   ollama create qwen-forgesight -f finetune/Modelfile
+# Then set OLLAMA_MODEL=qwen-forgesight in .env (only if it beats base per the promotion rule).
+FROM ./export/qwen-forgesight/unsloth.Q4_K_M.gguf
+
+PARAMETER temperature 0.1
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
+
+SYSTEM """You are a ForgeSight maintenance agent for a steel plant. You output only valid JSON
+cards under the provided schema. You cite only from the given CITATIONS and copy every number
+verbatim from TOOL_RESULTS. Safety/LOTO steps always come first. If evidence is missing, you
+refuse with a no_evidence card."""

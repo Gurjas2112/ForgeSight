@@ -1,0 +1,36 @@
+{
+  "_doc": "Train/serve parity contract. Read by ml/*/train.py AND backend/tools/ml_tools.py.",
+  "version": "v1",
+  "anomaly": {
+    "sensor_cols": ["vibration_de", "vibration_nde", "bearing_temp", "motor_current", "rpm", "load_pct"],
+    "feature_cols": ["vibration_de", "vibration_nde", "bearing_temp", "motor_current", "load_pct"],
+    "roll_window": 12,
+    "healthy_days": 20,
+    "ewma_alpha": 0.1,
+    "ewma_k": 3.0,
+    "contamination": "auto",
+    "random_state": 42
+  },
+  "rul": {
+    "alarm_threshold_mm_s": 7.1,
+    "trend_window_points": 576,
+    "rul_cap_cycles": 125,
+    "roll_windows": [5, 10],
+    "drop_near_constant": true
+  },
+  "failure_classifier": {
+    "drop_cols": ["UDI", "UID", "Product ID"],
+    "drop_target_classes": ["RNF"],
+    "target_cols": ["TWF", "HDF", "PWF", "OSF"],
+    "random_state": 42
+  },
+  "defect": {
+    "target": "fault_binary",
+    "pca_components": 5,
+    "knn_neighbors": 5,
+    "n_splits": 5,
+    "n_repeats": 2,
+    "f_beta": 3.0,
+    "random_state": 42
+  }
+}
