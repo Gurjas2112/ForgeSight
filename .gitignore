@@ -31,6 +31,20 @@ finetune/export/*
 backend/models/*.joblib
 backend/models/*.json
 !backend/models/.gitkeep
+# Published serve-time artifacts ARE tracked + shipped (so `railway up`, which filters by
+# .gitignore, includes them and the API serves real inference out of the box).
+!backend/models/anomaly_iforest_v1.joblib
+!backend/models/scaler_v1.joblib
+!backend/models/defect_pipeline_v1.joblib
+!backend/models/rul_xgb_v1.joblib
+!backend/models/failure_xgb_v1.json
+!backend/models/failure_azure_xgb_v1.json
+!backend/models/feature_order.json
+!backend/models/azure_feature_order.json
+!backend/models/threshold.json
+!backend/models/feature_config.json
+!backend/models/metrics.json
+!backend/models/scorecard.json
 
 # --- Node / Next.js ---
 node_modules/
