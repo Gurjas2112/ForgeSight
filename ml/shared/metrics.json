@@ -28,7 +28,9 @@
     "split": "GroupShuffleSplit by unit",
     "rul_cap": 125,
     "rmse_cycles": 16.39,
-    "n_features": 45
+    "n_features": 45,
+    "test_set_rmse_cycles": 18.73,
+    "test_units": 100
   },
   "defect": {
     "algorithm": "LightGBM + PCA-residual/kNN (leakage-safe per fold)",

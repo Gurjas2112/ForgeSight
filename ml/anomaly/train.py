@@ -17,9 +17,11 @@ from sklearn.metrics import precision_score, recall_score
 from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.mlio import DATA, append_metric, load_feature_config, publish  # noqa: E402
+from shared.mlio import (  # noqa: E402
+    DATA, append_metric, load_feature_config, publish, write_submission)
 
-EXPORT = Path(__file__).resolve().parent / "export"
+MODEL_DIR = Path(__file__).resolve().parent
+EXPORT = MODEL_DIR / "export"
 EXPORT.mkdir(exist_ok=True)
 
 
@@ -59,6 +61,18 @@ def main() -> int:
     lead_days = None
     if len(crossing) and len(flagged):
         lead_days = round((crossing.iloc[0] - flagged.iloc[0]).total_seconds() / 86400, 2)
+
+    # --- Kaggle-style test/submission over the held-out (post-healthy) window, deterministic ---
+    test_out = test.sort_values(["equipment_id", "ts"]).reset_index(drop=True).copy()
+    Xte_scaled = scaler.transform(test_out[feat_cols])
+    test_out["window_id"] = np.arange(len(test_out))
+    score = iforest.decision_function(Xte_scaled)        # <0 => more anomalous
+    is_anom = (iforest.predict(Xte_scaled) == -1).astype(int)
+    test_df = test_out[["window_id", "equipment_id", "ts"] + feat_cols].copy()
+    sub = pd.DataFrame({"window_id": test_out["window_id"].to_numpy(),
+                        "anomaly_score": np.round(score, 6),
+                        "is_anomalous": is_anom})
+    write_submission(MODEL_DIR, test_df, sub, key_cols=["window_id"])
 
     joblib.dump(iforest, EXPORT / "anomaly_iforest_v1.joblib")
     joblib.dump(scaler, EXPORT / "scaler_v1.joblib")

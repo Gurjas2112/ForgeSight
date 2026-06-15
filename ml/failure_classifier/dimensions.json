@@ -1,0 +1,35 @@
+{
+  "key_cols": [
+    "id"
+  ],
+  "test.csv": {
+    "rows": 2000,
+    "cols": 6,
+    "columns": [
+      "id",
+      "Air temperature",
+      "Process temperature",
+      "Rotational speed",
+      "Torque",
+      "Tool wear"
+    ]
+  },
+  "submission.csv": {
+    "rows": 2000,
+    "cols": 3,
+    "columns": [
+      "id",
+      "failure_prob",
+      "failure_pred"
+    ]
+  },
+  "sample_submission.csv": {
+    "rows": 2000,
+    "cols": 3,
+    "columns": [
+      "id",
+      "failure_prob",
+      "failure_pred"
+    ]
+  }
+}

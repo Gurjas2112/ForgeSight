@@ -19,9 +19,11 @@ from sklearn.model_selection import GroupShuffleSplit
 from xgboost import XGBRegressor
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.mlio import DATA, append_metric, load_feature_config, publish  # noqa: E402
+from shared.mlio import (  # noqa: E402
+    DATA, append_metric, load_feature_config, publish, write_submission)
 
-EXPORT = Path(__file__).resolve().parent / "export"
+MODEL_DIR = Path(__file__).resolve().parent
+EXPORT = MODEL_DIR / "export"
 EXPORT.mkdir(exist_ok=True)
 
 COLS = ["unit", "cycle"] + [f"op{i}" for i in range(1, 4)] + [f"s{i}" for i in range(1, 22)]
@@ -52,11 +54,33 @@ def main() -> int:
 
     joblib.dump({"model": model, "features": feat}, EXPORT / "rul_xgb_v1.joblib")
     publish(EXPORT, "rul_xgb_v1.joblib")
+
+    # --- Kaggle-style test/submission on the OFFICIAL C-MAPSS FD001 test set (100 units) ---
+    # last cycle per test unit -> predict RUL; compare to RUL_FD001.txt for an honest test RMSE.
+    test_raw = pd.read_csv(DATA / "raw" / "cmapss" / "test_FD001.txt", sep=r"\s+",
+                           header=None, names=COLS)
+    for s in keep:
+        for wdw in cfg["roll_windows"]:
+            test_raw[f"{s}_rm{wdw}"] = test_raw.groupby("unit")[s].transform(
+                lambda x: x.rolling(wdw, min_periods=1).mean())
+    last = test_raw.sort_values(["unit", "cycle"]).groupby("unit").tail(1).sort_values("unit")
+    rul_pred = np.clip(model.predict(last[feat]), 0, cfg["rul_cap_cycles"])
+    true_rul = pd.read_csv(DATA / "raw" / "cmapss" / "RUL_FD001.txt", header=None)[0].to_numpy()
+    test_rmse = float(np.sqrt(mean_squared_error(
+        np.clip(true_rul, 0, cfg["rul_cap_cycles"]), rul_pred)))
+
+    test_df = last[["unit", "cycle"] + feat].reset_index(drop=True)
+    sub = pd.DataFrame({"unit": last["unit"].to_numpy(),
+                        "rul_pred": np.round(rul_pred, 2)}).reset_index(drop=True)
+    write_submission(MODEL_DIR, test_df, sub, key_cols=["unit"])
+
     append_metric("rul", {
         "algorithm": "XGBoost", "trained_on": "C-MAPSS FD001", "split": "GroupShuffleSplit by unit",
         "rul_cap": cfg["rul_cap_cycles"], "rmse_cycles": round(rmse, 2), "n_features": len(feat),
+        "test_set_rmse_cycles": round(test_rmse, 2), "test_units": int(len(sub)),
     })
-    print(f"\nrul: RMSE={rmse:.2f} cycles (target ~16-18, by-unit split)")
+    print(f"\nrul: holdout RMSE={rmse:.2f} | official test RMSE={test_rmse:.2f} cycles "
+          f"({len(sub)} units, by-unit split)")
     return 0
 
 

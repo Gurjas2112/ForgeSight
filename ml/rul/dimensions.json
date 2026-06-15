@@ -1,0 +1,74 @@
+{
+  "key_cols": [
+    "unit"
+  ],
+  "test.csv": {
+    "rows": 100,
+    "cols": 47,
+    "columns": [
+      "unit",
+      "cycle",
+      "s2",
+      "s3",
+      "s4",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15",
+      "s17",
+      "s20",
+      "s21",
+      "s2_rm5",
+      "s2_rm10",
+      "s3_rm5",
+      "s3_rm10",
+      "s4_rm5",
+      "s4_rm10",
+      "s6_rm5",
+      "s6_rm10",
+      "s7_rm5",
+      "s7_rm10",
+      "s8_rm5",
+      "s8_rm10",
+      "s9_rm5",
+      "s9_rm10",
+      "s11_rm5",
+      "s11_rm10",
+      "s12_rm5",
+      "s12_rm10",
+      "s13_rm5",
+      "s13_rm10",
+      "s14_rm5",
+      "s14_rm10",
+      "s15_rm5",
+      "s15_rm10",
+      "s17_rm5",
+      "s17_rm10",
+      "s20_rm5",
+      "s20_rm10",
+      "s21_rm5",
+      "s21_rm10"
+    ]
+  },
+  "submission.csv": {
+    "rows": 100,
+    "cols": 2,
+    "columns": [
+      "unit",
+      "rul_pred"
+    ]
+  },
+  "sample_submission.csv": {
+    "rows": 100,
+    "cols": 2,
+    "columns": [
+      "unit",
+      "rul_pred"
+    ]
+  }
+}

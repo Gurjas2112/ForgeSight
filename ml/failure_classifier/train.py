@@ -16,9 +16,11 @@ from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.mlio import DATA, append_metric, load_feature_config, publish  # noqa: E402
+from shared.mlio import (  # noqa: E402
+    DATA, append_metric, load_feature_config, publish, write_submission)
 
-EXPORT = Path(__file__).resolve().parent / "export"
+MODEL_DIR = Path(__file__).resolve().parent
+EXPORT = MODEL_DIR / "export"
 EXPORT.mkdir(exist_ok=True)
 
 
@@ -50,6 +52,15 @@ def main() -> int:
     f1 = float(f1_score(yte, pred, zero_division=0))
     recall = float(recall_score(yte, pred, zero_division=0))
     pr_auc = float(average_precision_score(yte, proba))
+
+    # --- Kaggle-style test/submission deliverable (held-out 20%, deterministic) ---
+    test_df = Xte.copy()
+    test_df.insert(0, "id", Xte.index.astype(int))
+    test_df = test_df.sort_values("id").reset_index(drop=True)
+    sub = pd.DataFrame({"id": Xte.index.astype(int),
+                        "failure_prob": np.round(proba, 6),
+                        "failure_pred": pred.astype(int)}).sort_values("id").reset_index(drop=True)
+    write_submission(MODEL_DIR, test_df, sub, key_cols=["id"])
 
     top = sorted(zip(X.columns, clf.feature_importances_), key=lambda t: -t[1])[:6]
     clf.save_model(EXPORT / "failure_xgb_v1.json")

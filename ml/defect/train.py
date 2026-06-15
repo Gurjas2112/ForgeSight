@@ -22,11 +22,13 @@ from sklearn.pipeline import Pipeline
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # repo root for backend import
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # ml/ for shared
-from shared.mlio import DATA, append_metric, load_feature_config, publish  # noqa: E402
+from shared.mlio import (  # noqa: E402
+    DATA, append_metric, load_feature_config, publish, write_submission)
 # AnomalyFeatures lives in backend so the pickled pipeline unpickles at serve time.
 from backend.tools.defect_features import AnomalyFeatures  # noqa: E402
 
-EXPORT = Path(__file__).resolve().parent / "export"
+MODEL_DIR = Path(__file__).resolve().parent
+EXPORT = MODEL_DIR / "export"
 EXPORT.mkdir(exist_ok=True)
 
 NAMED = ["Pastry", "Z_Scratch", "K_Scatch", "Stains", "Dirtiness", "Bumps"]
@@ -63,6 +65,19 @@ def main() -> int:
     else:
         fb = [(fbeta_score(y, (oof >= t).astype(int), beta=cfg["f_beta"], zero_division=0), t) for t in thr]
         cutoff = float(max(fb, key=lambda ft: ft[0])[1]); basis = "max F-beta=3"
+
+    # --- Kaggle-style test/submission: deterministic 20% slice scored with leakage-free OOF probs ---
+    from sklearn.model_selection import train_test_split as _tts
+    idx_all = np.arange(len(X))
+    _, test_idx = _tts(idx_all, test_size=0.2, stratify=y, random_state=cfg["random_state"])
+    test_idx = np.sort(test_idx)
+    test_df = X.iloc[test_idx].copy()
+    test_df.insert(0, "id", test_idx.astype(int))
+    sub = pd.DataFrame({"id": test_idx.astype(int),
+                        "defect_prob": np.round(oof[test_idx], 6),
+                        "defect_pred": (oof[test_idx] >= cutoff).astype(int)})
+    write_submission(MODEL_DIR, test_df.reset_index(drop=True), sub.reset_index(drop=True),
+                     key_cols=["id"])
 
     pipe.fit(X, y)
     joblib.dump({"pipeline": pipe, "features": feat_cols}, EXPORT / "defect_pipeline_v1.joblib")

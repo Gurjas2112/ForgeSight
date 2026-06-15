@@ -1,0 +1,42 @@
+{
+  "key_cols": [
+    "window_id"
+  ],
+  "test.csv": {
+    "rows": 17280,
+    "cols": 13,
+    "columns": [
+      "window_id",
+      "equipment_id",
+      "ts",
+      "vibration_de",
+      "vibration_nde",
+      "bearing_temp",
+      "motor_current",
+      "load_pct",
+      "vibration_de_rmean",
+      "vibration_nde_rmean",
+      "bearing_temp_rmean",
+      "motor_current_rmean",
+      "load_pct_rmean"
+    ]
+  },
+  "submission.csv": {
+    "rows": 17280,
+    "cols": 3,
+    "columns": [
+      "window_id",
+      "anomaly_score",
+      "is_anomalous"
+    ]
+  },
+  "sample_submission.csv": {
+    "rows": 17280,
+    "cols": 3,
+    "columns": [
+      "window_id",
+      "anomaly_score",
+      "is_anomalous"
+    ]
+  }
+}
