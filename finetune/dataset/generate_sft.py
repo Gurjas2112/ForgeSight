@@ -128,11 +128,98 @@ def main() -> int:
                                  citations=[{"ref": r, "excerpt": ""} for r in sop_refs], user_query=phr)
             samples.append(_chat(DIAG_PERSONA, user, checklist))
 
+        # T4 — RULEstimate (Reliability agent narrates the trend tool; numbers come verbatim)
+        rul_phrasings = ["estimate RUL for {name}", "how long till {name} fails",
+                         "{name} remaining life pls", "kitna time hai before {name} trips"]
+        for eq, (name, _code) in EQUIP.items():
+            tr = {"_equipment": {"id": eq, "name": name},
+                  "estimate_rul": {"rul_days": 21.0, "rul_band": [16.8, 29.4],
+                                   "target_limit_mm_s": 7.1, "current_vibration_mm_s": 5.9,
+                                   "method": "trend_extrapolation"},
+                  "check_equipment_health": {"anomaly_score": 0.62, "is_anomalous": True,
+                                             "contributing_sensors": ["vibration_de", "bearing_temp"]}}
+            cite = [{"ref": f"{eq} vibration trend → 7.1 mm/s", "excerpt": ""},
+                    {"ref": "IsolationForest anomaly scan", "excerpt": ""}]
+            card = {"card_type": "rul", "rul_days": 21.0, "rul_band": [16.8, 29.4],
+                    "contributing_sensors": ["vibration_de", "bearing_temp"],
+                    "note": "Trend extrapolation of vibration_de to the 7.1 mm/s alarm limit.",
+                    "citation_refs": [f"{eq} vibration trend → 7.1 mm/s"]}
+            for phr in rul_phrasings:
+                user = build_context(equipment=tr["_equipment"], tool_results=tr,
+                                     citations=cite, user_query=phr.format(name=name))
+                samples.append(_chat(DIAG_PERSONA, user, card))
+
+        # T5 — PriorityCard (Supervisor narrates the deterministic matrix; score is provenanced)
+        prio_phrasings = ["what should we tackle first tonight", "priority order for the shift",
+                          "which job is most urgent", "rank tonights work by priority"]
+        factors = [{"name": "criticality", "raw": 0.9, "weight": 0.35, "contribution": 31.5},
+                   {"name": "delay_severity", "raw": 0.7, "weight": 0.30, "contribution": 21.0},
+                   {"name": "spares", "raw": 1.0, "weight": 0.20, "contribution": 20.0},
+                   {"name": "lead_time", "raw": 1.0, "weight": 0.15, "contribution": 15.0}]
+        prio_card = {"card_type": "priority", "priority_score": 87.5, "rank": 1, "factors": factors,
+                     "rationale": "Score 87.5/100 — dominated by criticality (+31.5). Deterministic · auditable.",
+                     "citation_refs": ["deterministic priority matrix"]}
+        prio_tr = {"_equipment": {"id": "sinter-fan-2", "name": "sinter ID fan 2"},
+                   "score_priority": {"priority_score": 87.5, "factors": factors}}
+        for phr in prio_phrasings:
+            user = build_context(equipment=prio_tr["_equipment"], tool_results=prio_tr,
+                                 citations=[{"ref": "deterministic priority matrix", "excerpt": ""}],
+                                 user_query=phr)
+            samples.append(_chat(DIAG_PERSONA, user, prio_card))
+
+        # T6 — SparesCard (Planner narrates stock + lead time from the spares record)
+        spares_phrasings = ["is the SKF 22230 bearing in stock", "spare availability for the fan bearing",
+                            "lead time on SKF 22230", "do we have the fan bearing spare"]
+        spares_card = {"card_type": "spares", "part_no": "SKF-22230-CCK", "stock_qty": 0,
+                       "lead_time_days": 28,
+                       "procurement_note": "0 in stock; 28 d lead time. Order now if RUL < lead time.",
+                       "citation_refs": ["SKF-22230-CCK"]}
+        spares_tr = {"_equipment": {"id": "sinter-fan-2", "name": "sinter ID fan 2"},
+                     "check_spares": [{"part_no": "SKF-22230-CCK", "stock_qty": 0, "lead_time_days": 28}]}
+        for phr in spares_phrasings:
+            user = build_context(equipment=spares_tr["_equipment"], tool_results=spares_tr,
+                                 citations=[{"ref": "SKF-22230-CCK", "excerpt": ""}], user_query=phr)
+            samples.append(_chat(DIAG_PERSONA, user, spares_card))
+
+        # T7 — WaitAssessmentCard (fan-out: RUL + spares + priority → can it wait?)
+        wait_phrasings = ["can sinter fan 2 wait till Sunday's shutdown",
+                          "is it safe to run the fan till the weekend window",
+                          "can it wait till sunday", "hold the fan till sunday shutdown?"]
+        wait_card = {"card_type": "wait_assessment", "verdict": "yes_with_conditions",
+                     "rul_days": 21.0, "days_to_window": 5.0,
+                     "monitoring_plan": "Trend vibration_de daily; escalate if it crosses 7.1 mm/s.",
+                     "procurement_callout": "SKF-22230-CCK lead time 28 d > RUL 21 d — order now.",
+                     "summary": "Yes, until Sunday (RUL 21 d > 5 d to window), but order the spare now.",
+                     "citation_refs": ["sinter-fan-2 vibration trend → 7.1 mm/s", "SKF-22230-CCK"]}
+        wait_tr = {"_equipment": {"id": "sinter-fan-2", "name": "sinter ID fan 2"},
+                   "estimate_rul": {"rul_days": 21.0, "method": "trend_extrapolation"},
+                   "check_spares": [{"part_no": "SKF-22230-CCK", "stock_qty": 0, "lead_time_days": 28}],
+                   "score_priority": {"priority_score": 87.5}}
+        wait_cites = [{"ref": "sinter-fan-2 vibration trend → 7.1 mm/s", "excerpt": ""},
+                      {"ref": "SKF-22230-CCK", "excerpt": ""}]
+        for phr in wait_phrasings:
+            user = build_context(equipment=wait_tr["_equipment"], tool_results=wait_tr,
+                                 citations=wait_cites, user_query=phr)
+            samples.append(_chat(DIAG_PERSONA, user, wait_card))
+
         # T10 — no_evidence refusal (empty retrieval)
         for q in ("diagnose the flux capacitor", "what is the RUL of the teleporter"):
             user = build_context(equipment=None, tool_results={}, citations=[], user_query=q)
             samples.append(_chat(DIAG_PERSONA, user, {"card_type": "no_evidence",
                 "message": "I couldn't find supporting manuals, SOPs, or records for that. I won't guess."}))
+
+    # T1b — extra intent coverage for the analytical / report intents
+    for text, intent, qclass in [
+        ("how many F3 trips this month and the most common root cause", "analytical_query", "knowledge"),
+        ("which equipment had the most downtime", "analytical_query", "knowledge"),
+        ("list the open critical alerts", "analytical_query", "live_status"),
+        ("generate an abnormal alert report for the fan", "report_request", "action"),
+    ]:
+        for variant in (text, text + "?"):
+            samples.append(_chat(
+                "Classify the maintenance query. Output only JSON with intent and query_class.",
+                f"EQUIPMENT: (none)\nUSER QUERY: {variant}",
+                {"intent": intent, "query_class": qclass}))
 
     RNG.shuffle(samples)
     n_eval = max(1, len(samples) // 10)
