@@ -62,11 +62,13 @@ def main() -> None:
 
     # Heavy imports live inside main so importing this module never requires a GPU stack.
     import inspect
+    # Unsloth MUST be imported before trl/transformers/peft so its optimizations and patches
+    # apply; otherwise its "<EOS_TOKEN>" sentinel leaks into TRL and training fails.
+    from unsloth import FastLanguageModel, is_bfloat16_supported
+    from unsloth.chat_templates import get_chat_template
     import torch  # noqa: F401
     from datasets import Dataset
     from trl import SFTConfig, SFTTrainer
-    from unsloth import FastLanguageModel, is_bfloat16_supported
-    from unsloth.chat_templates import get_chat_template
 
     print(f"[1/5] loading {MODEL_NAME} (4-bit, max_seq={args.max_seq}) …")
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -108,6 +110,16 @@ def main() -> None:
         lr_scheduler_type="linear", seed=SEED, output_dir=str(HERE / "outputs"),
         report_to="none")
     cfg_kwargs.update({k: v for k, v in optional.items() if k in cfg_params})
+
+    # Newer TRL validates SFTConfig.eos_token against the vocab. Pin it to the tokenizer's
+    # real EOS so Unsloth's "<EOS_TOKEN>" placeholder can't leak through; fall back to the
+    # Qwen2.5 chat EOS if the tokenizer's eos_token isn't a genuine in-vocab token.
+    if "eos_token" in cfg_params:
+        eos = tokenizer.eos_token
+        eid = tokenizer.convert_tokens_to_ids(eos) if eos else None
+        if not isinstance(eid, int) or eid < 0 or eid == getattr(tokenizer, "unk_token_id", None):
+            eos = "<|im_end|>"
+        cfg_kwargs["eos_token"] = eos
 
     trainer_kwargs = dict(model=model, train_dataset=ds, args=SFTConfig(**cfg_kwargs))
     trainer_kwargs["processing_class" if "processing_class" in trainer_params
