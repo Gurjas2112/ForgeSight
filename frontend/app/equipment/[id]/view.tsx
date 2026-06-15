@@ -32,7 +32,13 @@ export function EquipmentView({ id }: { id: string }) {
               <div>
                 <div className="text-lg font-semibold">{d.name}</div>
                 <div className="text-xs text-[#8B98A5] mono">{d.id} · {d.zone} · criticality {d.criticality}</div>
-                <div className="mt-2"><StatusBadge label={sev === "ok" ? "HEALTHY" : sev.toUpperCase()} sev={sev} /></div>
+                <div className="mt-2 flex items-center gap-2">
+                  <StatusBadge label={sev === "ok" ? "HEALTHY" : sev.toUpperCase()} sev={sev} />
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#232B35] text-[#8B98A5] bg-[#1C232C]"
+                    title="Physics-shaped digital twin — sensors are simulated; the anomaly/RUL inference runs live on the stream.">
+                    Digital twin
+                  </span>
+                </div>
               </div>
               <div className="flex flex-col items-end gap-2">
                 {h?.rul_days != null && <RulCountdown days={h.rul_days} />}

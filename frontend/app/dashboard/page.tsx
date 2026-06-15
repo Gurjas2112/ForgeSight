@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
-import { getAlerts, getEquipment } from "@/lib/api";
-import type { Alert, Equipment } from "@/lib/types";
+import { getAlerts, getEquipment, getPlantSummary } from "@/lib/api";
+import type { Alert, Equipment, PlantSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/ui";
 import { ModelScorecard } from "@/components/ModelScorecard";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -18,24 +18,39 @@ function tileState(e: Equipment): { sev: string; label: string } {
 function Overview() {
   const [eq, setEq] = useState<Equipment[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [summary, setSummary] = useState<PlantSummary>();
   const [err, setErr] = useState<string>();
 
   useEffect(() => {
     getEquipment().then(setEq).catch((e) => setErr(String(e)));
     getAlerts().then(setAlerts).catch(() => {});
+    getPlantSummary().then(setSummary).catch(() => {});
   }, []);
+
+  const availability = summary ? `${summary.availability_pct}%` : "—";
+  const openAlerts = summary ? summary.open_alerts : alerts.length;
+  const downtimeAtRisk = summary ? summary.downtime_at_risk_label : "—";
+  const riskTitle = summary
+    ? `${summary.at_risk_count} at-risk asset(s) · ${String(summary.assumptions.downtime_at_risk)}`
+    : undefined;
 
   return (
     <div className="max-w-7xl mx-auto px-5 py-6">
       <div className="flex items-end justify-between mb-5">
         <div>
-          <h1 className="text-xl font-semibold">Plant Overview</h1>
-          <p className="text-sm text-[#8B98A5]">6 critical assets · governed multi-agent decision support</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold">Plant Overview</h1>
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#232B35] text-[#8B98A5] bg-[#1C232C]"
+              title="Sensor data is a physics-shaped digital twin of a steel plant — the governance, ML and reasoning run live on it.">
+              Digital twin · simulated sensors
+            </span>
+          </div>
+          <p className="text-sm text-[#8B98A5]">{eq.length} critical assets · governed multi-agent decision support</p>
         </div>
         <div className="flex gap-6 text-right">
-          <div><div className="mono text-2xl font-semibold text-[#3FB68B]">92%</div><div className="text-xs text-[#8B98A5]">availability</div></div>
-          <div><div className="mono text-2xl font-semibold text-[#E8B931]">{alerts.length}</div><div className="text-xs text-[#8B98A5]">open alerts</div></div>
-          <div><div className="mono text-2xl font-semibold text-[#FF6A2B]">₹18L</div><div className="text-xs text-[#8B98A5]">downtime at risk</div></div>
+          <div><div className="mono text-2xl font-semibold text-[#3FB68B]">{availability}</div><div className="text-xs text-[#8B98A5]">availability</div></div>
+          <div><div className="mono text-2xl font-semibold text-[#E8B931]">{openAlerts}</div><div className="text-xs text-[#8B98A5]">{summary ? "assets alerting" : "open alerts"}</div></div>
+          <div title={riskTitle}><div className="mono text-2xl font-semibold text-[#FF6A2B]">{downtimeAtRisk}</div><div className="text-xs text-[#8B98A5]">downtime at risk</div></div>
         </div>
       </div>
 

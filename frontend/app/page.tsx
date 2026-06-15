@@ -41,7 +41,8 @@ export default function Landing() {
         <p className="mt-4 text-lg text-[#9fb0c0] max-w-2xl mx-auto">
           ForgeSight is a governed multi-agent maintenance wizard for steel plants — every answer
           cited, every score deterministic, every agent under an explicit charter, running fully
-          on-premise on an open-source SLM.
+          on-premise on an open-source SLM. It runs on a physics-shaped <span className="text-[#c3ced9]">digital twin</span> of
+          a steel plant: the sensors are simulated, the governance, ML and reasoning are real.
         </p>
         <div className="mt-7 flex items-center justify-center gap-3">
           <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#4A90D9] text-white font-medium hover:bg-[#3a7bc0]">
@@ -98,7 +99,7 @@ export default function Landing() {
       </section>
 
       <section className="py-12 text-center">
-        <h2 className="text-2xl font-semibold">Ready to see it on a live plant?</h2>
+        <h2 className="text-2xl font-semibold">Ready to see it on the plant digital twin?</h2>
         <p className="text-[#8B98A5] mt-2">Sign in and open the control room.</p>
         <Link href="/dashboard" className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#FF6A2B] text-black font-medium hover:opacity-90">
           Open the dashboard <ArrowRight size={16} />
