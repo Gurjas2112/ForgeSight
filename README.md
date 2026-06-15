@@ -47,27 +47,47 @@ foundation + the Scenario A vertical slice (fault code → cited `DiagnosisCard`
   `ollama pull qwen2.5:3b-instruct && ollama pull nomic-embed-text`
 - A Supabase project (Postgres + pgvector). Set `DATABASE_URL` in `.env`.
 
-## Run order (Pass 1)
+## Run order (full system)
 
 ```bash
 cp .env.example .env          # then fill DATABASE_URL + keys
+uv sync                        # or: uv pip install -r backend/requirements.txt + ml/finetune extras
+ollama pull qwen2.5:3b-instruct && ollama pull nomic-embed-text
 
-# 1. Datasets first (Gate 1)
-uv run python data/fetch_data.py                      # benchmarks → data/raw/
-uv run python data/synthetic/generate_sensors.py      # → sensor_readings.csv (~52k rows)
-uv run python data/corpus/seed_corpus.py \
-    --pdf-dir data/synthetic/manuals \
-    --out-sql data/corpus/corpus_ingest.sql           # → corpus_ingest.sql + breakdown_history.json
+# 1. Datasets + corpus (Gate 1)
+uv run python data/fetch_data.py                      # C-MAPSS / AI4I / Steel Plates → data/raw/
+uv run python data/synthetic/generate_sensors.py     # → sensor_readings.csv (~52k rows)
+uv run python data/corpus/seed_corpus.py --pdf-dir data/synthetic/manuals \
+    --out-sql data/corpus/corpus_ingest.sql          # → corpus_ingest.sql + breakdown_history.json
 
-# 2. Apply DB schema + load corpus (Supabase)
-uv run python backend/db/apply_migrations.py          # migrations.sql + seed_accounts.sql + corpus_ingest.sql
+# 2. Classical ML (Gate 2) — artifacts → backend/models/
+uv run python ml/anomaly/train.py
+uv run python ml/failure_classifier/train.py
+uv run python ml/rul/train.py
+uv run python ml/defect/train.py
+cp ml/shared/feature_config.json ml/shared/metrics.json backend/models/
 
-# 3. Scenario A end-to-end (Gate 4, partial)
-uv run python scripts/diagnose_f3.py                  # → valid DiagnosisCard citing BR-2024-0312
+# 3. (optional) Fine-tune — runs on Colab/GPU; base Qwen ships otherwise
+uv run python finetune/dataset/generate_sft.py && uv run python finetune/dataset/quality_gates.py
+#   then finetune/train_qlora.py on Colab → ollama create qwen-forgesight -f finetune/Modelfile
 
-# 4. Tests
-uv run pytest backend/tests -q
+# 4. Database — Supabase (set DATABASE_URL) OR a local pgvector container for an offline demo:
+bash scripts/local_pg.sh                              # prints DATABASE_URL for the container
+export DATABASE_URL=postgresql://postgres:forgesight@localhost:5433/forgesight
+uv run python backend/db/apply_migrations.py          # schema + seeds + corpus + sensors
+uv run python backend/scheduler/health_scan.py --once # populate equipment_health + alerts
+
+# 5. Backend API + frontend
+uv run uvicorn backend.server:app --port 8000         # graph over HTTP (terminal 1)
+cd frontend && npm install && npm run dev             # localhost:3000 (terminal 2)
+
+# Verify (Gate 4): governed graph + tests
+uv run python scripts/diagnose_f3.py                  # DiagnosisCard citing BR-2024-0312
+uv run pytest backend/tests -q                        # 23 green
 ```
+
+Open **localhost:3000** → Plant Overview → click the F3 tile → ask the Copilot "diagnose the F3
+trip". See `docs/demo_script.md` for the full recording choreography.
 
 ## Demo credentials (seeded, pre-confirmed)
 

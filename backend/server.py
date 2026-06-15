@@ -155,6 +155,22 @@ def equipment_detail(eq_id: str) -> dict:
     }
 
 
+@app.get("/evidence")
+def evidence(ref: str) -> dict:
+    """Resolve a citation ref to its exact source excerpt (Evidence Drawer). doc_chunks for
+    manuals/SOPs/records; a description for trend/matrix/model citations."""
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT content, doc_type, source, section_ref FROM doc_chunks "
+                    "WHERE section_ref = %s OR section_ref = %s OR section_ref ILIKE %s LIMIT 1",
+                    (ref, ref + " [VERIFIED]", f"%{ref}%"))
+        r = cur.fetchone()
+    if r:
+        return {"ref": ref, "kind": r[1], "source": r[2], "section_ref": r[3], "content": r[0]}
+    return {"ref": ref, "kind": "derived", "source": "ForgeSight",
+            "content": f"{ref} — derived from a deterministic tool / ML model output "
+                       "(priority matrix, vibration trend, or anomaly scan). Not a document."}
+
+
 @app.get("/alerts")
 def alerts() -> list[dict]:
     with STATE["pool"].connection() as conn, conn.cursor() as cur:

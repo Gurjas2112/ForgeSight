@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --graphite: #0E1116;
+  --panel: #161B22;
+  --panel-2: #1C232C;
+  --steel: #4A90D9;
+  --molten: #FF6A2B;     /* live / critical ONLY */
+  --ok: #3FB68B;
+  --warn: #E8B931;
+  --crit: #E5484D;
+  --text: #E6EDF3;
+  --muted: #8B98A5;
+  --border: #232B35;
+  --background: var(--graphite);
+  --foreground: var(--text);
+}
+
+html, body {
+  background: var(--graphite);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.mono { font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #2a323d; border-radius: 8px; }
+
+@keyframes pulse-crit {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229,72,77,0.55); }
+  50% { box-shadow: 0 0 0 7px rgba(229,72,77,0); }
+}
+.pulse-crit { animation: pulse-crit 1.8s infinite; }
+
+@keyframes slidein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.slidein { animation: slidein 0.25s ease-out; }
