@@ -23,8 +23,11 @@ from typing import Any
 from langchain_core.runnables import RunnableLambda
 
 from backend.agent.governance import ActionClass, AgentAuthority
-from backend.schemas.agent_models import Budget, DelegationEvent, sum_budget
+from backend.schemas.agent_models import Budget, Citation, DelegationEvent, sum_budget
+from backend.tools.deterministic import procurement_rule, score_priority
+from backend.tools.ml_tools import check_equipment_health, estimate_rul
 from backend.tools.rag import match_history, retrieve_rag, to_citations
+from backend.tools.spares import check_spares
 
 _FAULT_RE = re.compile(r"\b([A-Z]{2,}-[A-Z0-9-]*\d{2,}|[A-Z]?\d{3,5})\b")
 
@@ -113,9 +116,124 @@ def make_diagnostic_pipeline(authority: AgentAuthority, pool) -> RunnableLambda:
     return RunnableLambda(_run, name=agent)
 
 
+def _equipment_row(conn, eq: str | None) -> dict | None:
+    if not eq:
+        return None
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name, zone, criticality FROM equipment WHERE id = %s", (eq,))
+        r = cur.fetchone()
+    return {"id": r[0], "name": r[1], "zone": r[2], "criticality": r[3]} if r else None
+
+
+def make_reliability_pipeline(authority: AgentAuthority, pool) -> RunnableLambda:
+    """Reliability Agent: check_equipment_health → estimate_rul (narrates ML tool outputs)."""
+    agent = "reliability_agent"
+
+    def _run(state: dict) -> dict:
+        user, eq = state["user"], state.get("equipment_id")
+        deleg, cites, tr = [], [], {}
+        with pool.connection() as conn:
+            tr["_equipment"] = _equipment_row(conn, eq)
+            authority.check_tool(agent, "check_equipment_health", ActionClass.READ, user)
+            authority.check_budget(agent, state.get("consumed") or Budget())
+            health = check_equipment_health(conn, eq or "")
+            tr["check_equipment_health"] = health.model_dump()
+            cites.append(Citation(kind="model_output", ref="IsolationForest anomaly scan"))
+            deleg.append(DelegationEvent(agent=agent, text=f"scanning health (score {health.anomaly_score})…"))
+
+            authority.check_tool(agent, "estimate_rul", ActionClass.READ, user)
+            rul = estimate_rul(conn, eq or "")
+            tr["estimate_rul"] = rul.model_dump()
+            cites.append(Citation(kind="trend", ref=f"{eq} vibration trend → {rul.target_limit_mm_s} mm/s"))
+            deleg.append(DelegationEvent(agent=agent, text=f"projecting RUL ≈ {rul.rul_days} d…"))
+        return {"delegations": deleg, "citations": cites, "tool_results": tr,
+                "consumed": Budget(tool_calls=2)}
+
+    return RunnableLambda(_run, name=agent)
+
+
+def make_supervisor_pipeline(authority: AgentAuthority, pool) -> RunnableLambda:
+    """Supervisor Agent: score_priority (deterministic) → narration. Never computes the score."""
+    agent = "supervisor_agent"
+
+    def _run(state: dict) -> dict:
+        user, eq = state["user"], state.get("equipment_id")
+        deleg, cites, tr = [], [], {}
+        with pool.connection() as conn:
+            row = _equipment_row(conn, eq)
+            tr["_equipment"] = row
+            spares = check_spares(conn, eq or "")
+            in_stock = any(s.stock_qty > 0 for s in spares)
+            lead = min((s.lead_time_days for s in spares), default=0)
+            rul = None
+            try:
+                rul = estimate_rul(conn, eq or "").rul_days
+            except Exception:  # noqa: BLE001
+                pass
+            authority.check_tool(agent, "score_priority", ActionClass.READ, user)
+            authority.check_budget(agent, state.get("consumed") or Budget())
+            result = score_priority(criticality=(row or {}).get("criticality", 5) or 5,
+                                    delay_severity=7.0, spares_in_stock=in_stock,
+                                    lead_time_days=lead, rul_days=rul)
+            tr["score_priority"] = result.model_dump()
+            cites.append(Citation(kind="priority_matrix", ref="deterministic priority matrix"))
+            deleg.append(DelegationEvent(agent=agent, text=f"scoring urgency → {result.priority_score}/100…"))
+        return {"delegations": deleg, "citations": cites, "tool_results": tr,
+                "consumed": Budget(tool_calls=1)}
+
+    return RunnableLambda(_run, name=agent)
+
+
+def make_planner_pipeline(authority: AgentAuthority, pool) -> RunnableLambda:
+    """Planner Agent: check_spares → procurement_rule (→ propose_reservation as a COMMIT)."""
+    agent = "planner_agent"
+
+    def _run(state: dict) -> dict:
+        user, eq = state["user"], state.get("equipment_id")
+        query = _last_user_text(state).lower()
+        deleg, cites, tr = [], [], {}
+        update: dict[str, Any] = {}
+        with pool.connection() as conn:
+            tr["_equipment"] = _equipment_row(conn, eq)
+            authority.check_tool(agent, "check_spares", ActionClass.READ, user)
+            authority.check_budget(agent, state.get("consumed") or Budget())
+            spares = check_spares(conn, eq or "")
+            tr["check_spares"] = [s.model_dump() for s in spares]
+            for s in spares:
+                cites.append(Citation(kind="spares_record", ref=s.part_no))
+            deleg.append(DelegationEvent(agent=agent, text="checking spares stock & lead time…"))
+
+            rul = None
+            try:
+                rul = estimate_rul(conn, eq or "").rul_days
+            except Exception:  # noqa: BLE001
+                pass
+            top = spares[0] if spares else None
+            if top:
+                authority.check_tool(agent, "procurement_rule", ActionClass.READ, user)
+                decision = procurement_rule(lead_time_days=top.lead_time_days, rul_days=rul,
+                                            stock_qty=top.stock_qty)
+                tr["procurement_rule"] = decision.model_dump()
+                deleg.append(DelegationEvent(agent=agent, text=f"procurement rule → {decision.action}"))
+                # COMMIT only when the user explicitly asks to reserve/order (HITL gate)
+                if decision.action in ("reserve_now", "order_now") and any(
+                        w in query for w in ("reserve", "go ahead", "order", "raise a po", "approve")):
+                    authority.check_tool(agent, "propose_reservation", ActionClass.COMMIT, user)
+                    update["pending_action"] = {
+                        "type": "reserve_spare", "part_no": top.part_no,
+                        "equipment_id": eq, "qty": 1, "session_id": state.get("session_id"),
+                        "rationale": decision.rationale}
+        return {"delegations": deleg, "citations": cites, "tool_results": tr,
+                "consumed": Budget(tool_calls=3), **update}
+
+    return RunnableLambda(_run, name=agent)
+
+
 def build_sub_agents(authority: AgentAuthority, pool) -> dict[str, RunnableLambda]:
-    """Name → pipeline runnable, consumed by AgentController. Pass 1: diagnostic only."""
+    """Name → pipeline runnable, consumed by AgentController. All four chartered agents."""
     return {
         "diagnostic_agent": make_diagnostic_pipeline(authority, pool),
-        # Pass 2/3: reliability_agent, supervisor_agent, planner_agent
+        "reliability_agent": make_reliability_pipeline(authority, pool),
+        "supervisor_agent": make_supervisor_pipeline(authority, pool),
+        "planner_agent": make_planner_pipeline(authority, pool),
     }
