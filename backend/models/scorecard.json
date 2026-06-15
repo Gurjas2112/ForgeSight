@@ -1,0 +1,274 @@
+{
+  "anomaly": {
+    "title": "Vibration anomaly detector",
+    "dataset": "Synthetic steel-plant sensors (healthy 20d)",
+    "algorithm": "IsolationForest",
+    "serve_mode": "live_on_sensors",
+    "metrics": {
+      "algorithm": "IsolationForest",
+      "trained_on": "synthetic healthy 20d",
+      "precision": 0.229,
+      "recall": 1.0,
+      "detection_lead_time_days": 8.7,
+      "n_features": 10
+    },
+    "key": "window_id",
+    "sample": {
+      "label": "most-anomalous held-out window",
+      "features": {
+        "vibration_de": 7.87,
+        "vibration_nde": 5.222,
+        "bearing_temp": 73.827,
+        "motor_current": 203.258,
+        "load_pct": 87.607,
+        "vibration_de_rmean": 7.814083333333333,
+        "vibration_nde_rmean": 5.146833333333333,
+        "bearing_temp_rmean": 73.04158333333334,
+        "motor_current_rmean": 199.03066666666663,
+        "load_pct_rmean": 86.02241666666667
+      },
+      "recorded": {
+        "anomaly_score": -0.148255,
+        "is_anomalous": true
+      }
+    }
+  },
+  "defect": {
+    "title": "Surface-defect classifier",
+    "dataset": "UCI Steel Plates Faults",
+    "algorithm": "LightGBM + PCA-residual/kNN (leakage-safe per fold)",
+    "serve_mode": "live_lightgbm",
+    "metrics": {
+      "algorithm": "LightGBM + PCA-residual/kNN (leakage-safe per fold)",
+      "trained_on": "UCI Steel Plates",
+      "pr_auc": 0.798,
+      "threshold": 0.9752,
+      "threshold_basis": "precision@recall>=0.7"
+    },
+    "key": "id",
+    "sample": {
+      "label": "highest-probability held-out plate",
+      "features": {
+        "X_Minimum": 1571.0,
+        "X_Maximum": 1583.0,
+        "Y_Minimum": 435871.0,
+        "Y_Maximum": 435916.0,
+        "Pixels_Areas": 379.0,
+        "X_Perimeter": 35.0,
+        "Y_Perimeter": 45.0,
+        "Sum_of_Luminosity": 37695.0,
+        "Minimum_of_Luminosity": 80.0,
+        "Maximum_of_Luminosity": 124.0,
+        "Length_of_Conveyer": 1700.0,
+        "TypeOfSteel_A300": 0.0,
+        "TypeOfSteel_A400": 1.0,
+        "Steel_Plate_Thickness": 90.0,
+        "Edges_Index": 0.1376,
+        "Empty_Index": 0.2982,
+        "Square_Index": 0.2667,
+        "Outside_X_Index": 0.0071,
+        "Edges_X_Index": 0.3429,
+        "Edges_Y_Index": 1.0,
+        "Outside_Global_Index": 1.0,
+        "LogOfAreas": 2.5786,
+        "Log_X_Index": 1.0792,
+        "Log_Y_Index": 1.6532,
+        "Orientation_Index": 0.7333,
+        "Luminosity_Index": -0.223,
+        "SigmoidOfAreas": 0.8299,
+        "K_Scratch": 0.0
+      },
+      "recorded": {
+        "defect_probability": 0.999986,
+        "defect_pred": 1
+      }
+    }
+  },
+  "failure_classifier": {
+    "title": "Machine-failure classifier (AI4I)",
+    "dataset": "AI4I 2020",
+    "algorithm": "XGBoost",
+    "serve_mode": "live_xgboost",
+    "metrics": {
+      "algorithm": "XGBoost",
+      "trained_on": "AI4I 2020",
+      "positive_rate": 0.033,
+      "failure_f1": 0.678,
+      "failure_recall": 0.909,
+      "pr_auc": 0.799,
+      "top_features": [
+        "Rotational speed",
+        "Torque",
+        "Tool wear",
+        "Air temperature",
+        "Process temperature"
+      ]
+    },
+    "key": "id",
+    "feature_order": [
+      "Air temperature",
+      "Process temperature",
+      "Rotational speed",
+      "Torque",
+      "Tool wear"
+    ],
+    "sample": {
+      "label": "highest-probability held-out machine",
+      "features": {
+        "Air temperature": 302.4,
+        "Process temperature": 311.0,
+        "Rotational speed": 1338.0,
+        "Torque": 67.6,
+        "Tool wear": 194.0
+      },
+      "recorded": {
+        "failure_probability": 0.999563,
+        "failure_pred": 1
+      }
+    }
+  },
+  "azure_pdm": {
+    "title": "24h-ahead failure predictor (Azure PdM)",
+    "dataset": "Azure PdM (100 machines, 2015)",
+    "algorithm": "XGBoost (24h-ahead)",
+    "serve_mode": "live_xgboost",
+    "metrics": {
+      "algorithm": "XGBoost (24h-ahead)",
+      "trained_on": "Azure PdM (100 machines, 2015)",
+      "split": "time-based (<2015-10-01 train)",
+      "positive_rate": 0.0221,
+      "failure_f1": 0.702,
+      "failure_recall": 0.922,
+      "pr_auc": 0.899,
+      "n_features": 18,
+      "top_features": [
+        "err_24h",
+        "pressure_rm24",
+        "rotate_rm24",
+        "vibration_rm24",
+        "volt_rm24",
+        "pressure"
+      ]
+    },
+    "key": "id",
+    "feature_order": [
+      "volt_rm24",
+      "rotate_rm24",
+      "pressure_rm24",
+      "vibration_rm24",
+      "volt_rs24",
+      "rotate_rs24",
+      "pressure_rs24",
+      "vibration_rs24",
+      "volt",
+      "rotate",
+      "pressure",
+      "vibration",
+      "err_24h",
+      "age",
+      "model_model1",
+      "model_model2",
+      "model_model3",
+      "model_model4"
+    ],
+    "sample": {
+      "label": "highest-probability held-out machine-hour",
+      "features": {
+        "volt_rm24": 171.91840146560028,
+        "rotate_rm24": 451.24105545754446,
+        "pressure_rm24": 127.13195791895792,
+        "vibration_rm24": 49.93650133075735,
+        "volt_rs24": 15.198610206774116,
+        "rotate_rs24": 59.70409410667517,
+        "pressure_rs24": 8.726381488857074,
+        "vibration_rs24": 4.449612997952645,
+        "volt": 157.915369545476,
+        "rotate": 476.58985772585,
+        "pressure": 116.25948154516,
+        "vibration": 46.7733847304968,
+        "err_24h": 2.0,
+        "age": 14,
+        "model_model1": true,
+        "model_model2": false,
+        "model_model3": false,
+        "model_model4": false
+      },
+      "recorded": {
+        "failure_probability": 0.999947,
+        "failure_pred": 1
+      }
+    }
+  },
+  "rul": {
+    "title": "RUL regressor (C-MAPSS benchmark)",
+    "dataset": "NASA C-MAPSS FD001",
+    "algorithm": "XGBoost",
+    "serve_mode": "live_xgboost",
+    "metrics": {
+      "algorithm": "XGBoost",
+      "trained_on": "C-MAPSS FD001",
+      "split": "GroupShuffleSplit by unit",
+      "rul_cap": 125,
+      "rmse_cycles": 16.39,
+      "n_features": 45,
+      "test_set_rmse_cycles": 18.73,
+      "test_units": 100
+    },
+    "key": "unit",
+    "feature_order": null,
+    "sample": {
+      "label": "shortest-RUL held-out engine unit",
+      "features": {
+        "s2": 643.49,
+        "s3": 1598.35,
+        "s4": 1427.83,
+        "s6": 21.61,
+        "s7": 551.53,
+        "s8": 2388.2,
+        "s9": 9075.26,
+        "s11": 48.11,
+        "s12": 519.67,
+        "s13": 2388.22,
+        "s14": 8148.37,
+        "s15": 8.4987,
+        "s17": 397.0,
+        "s20": 38.46,
+        "s21": 23.1537,
+        "s2_rm5": 643.436,
+        "s2_rm10": 643.438,
+        "s3_rm5": 1599.004,
+        "s3_rm10": 1600.6,
+        "s4_rm5": 1427.678,
+        "s4_rm10": 1424.889,
+        "s6_rm5": 21.61,
+        "s6_rm10": 21.61,
+        "s7_rm5": 551.236,
+        "s7_rm10": 551.575,
+        "s8_rm5": 2388.216,
+        "s8_rm10": 2388.201,
+        "s9_rm5": 9077.586,
+        "s9_rm10": 9077.877,
+        "s11_rm5": 48.032,
+        "s11_rm10": 47.996,
+        "s12_rm5": 519.7180000000001,
+        "s12_rm10": 519.958,
+        "s13_rm5": 2388.192,
+        "s13_rm10": 2388.192,
+        "s14_rm5": 8150.4,
+        "s14_rm10": 8150.291999999999,
+        "s15_rm5": 8.506620000000002,
+        "s15_rm10": 8.50077,
+        "s17_rm5": 396.0,
+        "s17_rm10": 395.5,
+        "s20_rm5": 38.446,
+        "s20_rm10": 38.497,
+        "s21_rm5": 23.130460000000003,
+        "s21_rm10": 23.13187
+      },
+      "recorded": {
+        "rul_pred_cycles": 6.27,
+        "unit": 81
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "cutoff": 0.9752,
+  "basis": "precision@recall>=0.7",
+  "pr_auc": 0.798,
+  "positive_rate": 0.452
+}
