@@ -6,14 +6,14 @@ manual / record / trend, every priority score deterministic, every agent under a
 charter with budgets and human-approval gates — running **fully on-premise** on a fine-tuned
 open-source SLM (no plant data leaves the network).
 
-The authoritative design lives in [`forgesight-v3-final.md`](forgesight-v3-final.md); the build
-order is [`BUILD_GUIDE.md`](BUILD_GUIDE.md).
+The architecture and model design live in [`docs/architecture.md`](docs/architecture.md); the
+deploy/run order is in [`docs/DEPLOY.md`](docs/DEPLOY.md) and below.
 
 ---
 
 ## ⚠️ Security: rotate these secrets
 
-`BUILD_GUIDE.md §10` shipped live-looking credentials in plaintext. Treat them as **compromised**
+An earlier draft shipped live-looking credentials in plaintext. Treat them as **compromised**
 and rotate in the Supabase dashboard before any real deployment:
 - `SUPABASE_JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
 - `FIRECRAWL_API_KEY`, `KAGGLE_KEY`
@@ -112,4 +112,4 @@ charter-scoped agent pipelines (deterministic tool sequences, **not** ReAct loop
 per-agent charters / budgets / escalation (audited allow+deny); `AgentGuardrails` enforce
 citation-existence, LOTO-first ordering, and matrix-provenance in code. The SLM (Ollama, Qwen2.5,
 `format=<schema>` constrained decoding) is invoked **only** at synthesis/repair — it narrates and
-fills schemas, it never selects tools or computes numbers. Full design: `forgesight-v3-final.md`.
+fills schemas, it never selects tools or computes numbers. Full design: [`docs/architecture.md`](docs/architecture.md).

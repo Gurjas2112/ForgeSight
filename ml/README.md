@@ -1,7 +1,7 @@
 # ml/ — Classical ML (Gate 2)
 
 Each model is a self-contained directory with a runnable `train.py`, its `export/` artifacts, and a
-**Kaggle-style `test.csv` → `submission.csv`** deliverable. Per `BUILD_GUIDE.md §3`:
+**Kaggle-style `test.csv` → `submission.csv`** deliverable. The trained models:
 
 - `anomaly/` — IsolationForest + EWMA control limits → `anomaly_iforest_v1.joblib`, `scaler_v1.joblib`
 - `failure_classifier/` — XGBoost on AI4I 2020 → `failure_xgb_v1.json`, `feature_order.json`

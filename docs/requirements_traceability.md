@@ -48,7 +48,7 @@ Legend: ✅ implemented & verified · ◐ implemented with a stated caveat · �
 | Deliverable | Status | Where |
 |-------------|--------|-------|
 | Source code of working prototype | ✅ | this repo |
-| Architecture / tech-stack / data-flow / model design doc | ✅ | `forgesight-v3-final.md`, `BUILD_GUIDE.md`, this file |
+| Architecture / tech-stack / data-flow / model design doc | ✅ | `docs/architecture.md`, `docs/finetune.md`, this file |
 | Alerting & prediction logic | ✅ | `health_scan.py`, `ml/*`, `docs/assumptions_limitations.md` |
 | Assumptions & limitations | ✅ | `docs/assumptions_limitations.md` |
 | Install / configure / run docs | ✅ | `README.md`, `docs/DEPLOY.md` |

@@ -2,7 +2,7 @@
 
 Unsloth QLoRA on Qwen2.5-3B-Instruct (Colab T4). Until this lands, the runtime uses **base
 Qwen2.5-3B-Instruct** via Ollama (`OLLAMA_MODEL=qwen2.5:3b-instruct`) — the design's sanctioned
-fallback. See `sft-dataset-spec.md` for the ~2,150-pair dataset and `BUILD_GUIDE.md §4`.
+fallback. See [`../docs/finetune.md`](../docs/finetune.md) for the dataset spec and fine-tune design.
 
 ## Train on a free Colab T4 (recommended)
 

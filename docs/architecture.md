@@ -1,11 +1,10 @@
 # ForgeSight — Architecture
 
-The authoritative architecture document is [`../forgesight-v3-final.md`](../forgesight-v3-final.md)
-(full-stack system design, data flow, model design, alerting/prediction logic, PS traceability).
-
-This file is the submission-facing pointer (PS §9). Implementation status by pass is tracked in
-the root [`README.md`](../README.md); the executable build order is
-[`../BUILD_GUIDE.md`](../BUILD_GUIDE.md).
+This is the submission-facing architecture document (PS §9): full-stack system design, data flow,
+model design, alerting/prediction logic, and PS traceability. Companion docs: requirements mapping
+in [`requirements_traceability.md`](requirements_traceability.md), fine-tune design in
+[`finetune.md`](finetune.md), deploy/run order in [`DEPLOY.md`](DEPLOY.md), sample I/O in
+[`sample_io.md`](sample_io.md). Implementation status is tracked in the root [`README.md`](../README.md).
 
 ## Pass 1 — what is built and proven
 - **Datasets/corpus** (`data/`): NASA C-MAPSS / AI4I / UCI Steel Plates downloaders; the synthetic
