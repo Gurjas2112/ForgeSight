@@ -39,6 +39,9 @@ out/
 dist/
 *.tsbuildinfo
 
+# --- Submission artifact ---
+ForgeSight_submission.zip
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
