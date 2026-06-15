@@ -1,0 +1,16 @@
+# Vercel builds only the Next.js app (project rootDirectory = frontend) but uploads from the git
+# root. Exclude the heavy ML/finetune/data trees (≈2 GB) so they are never shipped to Vercel.
+backend/
+ml/
+data/
+finetune/
+docs/
+scripts/
+.venv/
+.claude/
+.railway/
+.git/
+*.ipynb
+**/__pycache__/
+*.gguf
+*.zip
