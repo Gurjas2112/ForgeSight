@@ -7,7 +7,24 @@ import pytest
 
 from backend.agent.synthesis import _exemplar_block
 from backend.tools import feedback_store as fb
-from backend.tools.rag import RetrievedChunk, apply_feedback_ranking
+from backend.tools.rag import RetrievedChunk, _fts_terms, apply_feedback_ranking
+
+
+def test_fts_terms_drops_filler_and_keeps_codes():
+    """The embedding-less full-text path must survive natural-language questions: keep the
+    distinctive tokens (fault code, equipment) with OR semantics, anchor ILIKE on the code."""
+    ts, like = _fts_terms("Diagnose the F3 stand — it tripped on fault 0247 and cite prior records.")
+    terms = {t.lower() for t in ts.split(" OR ")}
+    assert "0247" in terms and "stand" in terms     # distinctive tokens survive
+    assert "diagnose" not in terms and "the" not in terms and "tripped" not in terms  # filler dropped
+    assert " OR " in ts                              # OR semantics (not implicit AND)
+    assert "0247" in like                            # ILIKE anchors on the most specific code token
+
+
+def test_fts_terms_prefers_full_fault_code_for_ilike():
+    ts, like = _fts_terms("root cause for HSM-F3-VFD-0247 on the F3 stand")
+    assert "HSM-F3-VFD-0247" in ts
+    assert like == "%HSM-F3-VFD-0247%"
 
 
 def _chunk(ref: str, score: float, verified: bool = False) -> RetrievedChunk:

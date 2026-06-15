@@ -13,6 +13,7 @@ Why hybrid + metadata filter (forgesight-v3-final.md §1.7):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from langchain_ollama import OllamaEmbeddings
@@ -85,6 +86,43 @@ def _embed_query(query: str) -> str | None:
         return None
 
 
+_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]+")
+# Conversational filler that carries no retrieval signal — dropped so the full-text query keys on
+# the distinctive tokens (fault codes, part numbers, equipment/component words) instead.
+_STOP = {
+    "the", "and", "for", "that", "with", "this", "when", "from", "into", "your", "you", "are",
+    "was", "has", "have", "can", "could", "would", "should", "will", "diagnose", "diagnosis",
+    "show", "shows", "showing", "rising", "cite", "prior", "past", "record", "records", "please",
+    "help", "what", "how", "why", "check", "checking", "tell", "give", "about", "issue", "problem",
+    "root", "cause", "causes", "trip", "trips", "tripped", "tripping", "fault", "faults",
+}
+
+
+def _fts_terms(query: str) -> tuple[str, str]:
+    """Turn a free-text question into (tsquery, ilike) for the embedding-less full-text path.
+
+    Natural-language questions ("Diagnose the F3 stand — it tripped on fault 0247 …") fail under
+    `websearch_to_tsquery`'s implicit AND because no single chunk contains every word. We keep only
+    the distinctive tokens (anything with a digit or hyphen — fault codes / part numbers — plus
+    content words) and OR them, and we anchor the ILIKE on the most specific token (a code if one is
+    present). This keeps citations REAL (still pure DB retrieval) while surviving on Railway, which
+    has no GPU embeddings.
+    """
+    toks = _TOKEN_RE.findall(query or "")
+    distinctive = [
+        t for t in toks
+        if any(ch.isdigit() for ch in t) or "-" in t
+        or (len(t) > 3 and t.lower() not in _STOP)
+    ]
+    keep = list(dict.fromkeys(distinctive)) or list(dict.fromkeys(toks))
+    if not keep:
+        return query, f"%{query}%"
+    tsquery = " OR ".join(keep)
+    coded = [t for t in keep if any(ch.isdigit() for ch in t)]
+    specific = max(coded, key=len) if coded else max(keep, key=len)
+    return tsquery, f"%{specific}%"
+
+
 def _doc_type_to_kind(doc_type: str, section_ref: str) -> str:
     if doc_type == "manual":
         return "manual"
@@ -96,13 +134,14 @@ def _doc_type_to_kind(doc_type: str, section_ref: str) -> str:
 def retrieve_rag(conn, query: str, equipment_id: str | None = None,
                  doc_types: list[str] | None = None, k: int = 8) -> list[RetrievedChunk]:
     vec_literal = _embed_query(query)
+    ts_query, like = _fts_terms(query)
     with conn.cursor() as cur:
         if vec_literal is None:                       # full-text-only (no cloud embeddings)
             cur.execute(FULLTEXT_SQL, {"eq": equipment_id, "dt": doc_types,
-                                       "q": query, "like": f"%{query}%", "k": k})
+                                       "q": ts_query, "like": like, "k": k})
         else:
             cur.execute(HYBRID_SQL, {"qv": vec_literal, "eq": equipment_id,
-                                     "dt": doc_types, "q": query, "k": k})
+                                     "dt": doc_types, "q": ts_query, "k": k})
         rows = cur.fetchall()
     chunks = [RetrievedChunk(str(r[0]), r[1], r[2], r[3], r[4], float(r[5])) for r in rows]
     return sorted(chunks, key=lambda c: c.id)            # stable for prefix/KV cache
