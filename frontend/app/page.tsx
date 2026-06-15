@@ -11,19 +11,19 @@ const FLOW = [
 ];
 
 const FEATURES = [
-  { icon: Brain, t: "On-prem SLM", d: "Fine-tuned Qwen2.5-3B under constrained decoding — no plant data leaves the network." },
+  { icon: Brain, t: "On-prem SLM (Qwen2.5-3B)", d: "Fine-tuned via QLoRA and served locally through Ollama under constrained decoding; the public demo falls back to a hosted LLM (Groq) since cloud has no GPU." },
   { icon: FileSearch, t: "Cited, or it refuses", d: "A code-level guardrail makes a fabricated citation physically impossible." },
-  { icon: Gauge, t: "5 validated ML models", d: "Anomaly · RUL · failure · defect · Azure-PdM — benchmarked on NASA / UCI / Azure data." },
+  { icon: Gauge, t: "Real ML inference", d: "Anomaly runs live on sensors; defect/failure/Azure/RUL run live on held-out benchmark rows — every number reproducible, shown in the model panel." },
   { icon: Workflow, t: "Deterministic scoring", d: "Priority & procurement from auditable rules, never an LLM guess." },
   { icon: ShieldCheck, t: "Human-in-the-loop", d: "COMMIT actions pause for explicit engineer approval." },
   { icon: Lock, t: "Role-based access", d: "Engineer and Admin roles, JWT-verified on every request." },
 ];
 
 const MODELS = [
-  ["Anomaly", "recall 1.0 · 8.7 d lead"],
-  ["RUL (C-MAPSS)", "RMSE 16.4 cycles"],
+  ["Anomaly (live on sensors)", "recall 1.0 · 8.7 d lead"],
+  ["RUL — C-MAPSS benchmark", "RMSE 16.4 cycles · serve = trend extrapolation"],
   ["Failure (AI4I)", "recall 0.91 · PR-AUC 0.80"],
-  ["Defect (Steel Plates)", "PR-AUC 0.80"],
+  ["Defect (Steel Plates)", "PR-AUC 0.80 · live LightGBM"],
   ["Azure PdM 24h-ahead", "PR-AUC 0.90 · recall 0.92"],
 ];
 
@@ -86,7 +86,7 @@ export default function Landing() {
       {/* Models */}
       <section className="py-10">
         <div className="panel p-5">
-          <div className="text-sm font-medium mb-3">About the models — benchmarks validate the method, the simulation validates the system</div>
+          <div className="text-sm font-medium mb-3">About the models — benchmarks validate the method, the simulation validates the system (live inferences on the dashboard)</div>
           <div className="flex flex-wrap gap-2">
             {MODELS.map(([m, s]) => (
               <span key={m} className="text-xs px-2.5 py-1 rounded bg-[#1C232C] border border-[#232B35]">

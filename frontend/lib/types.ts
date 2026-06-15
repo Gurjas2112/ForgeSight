@@ -58,3 +58,16 @@ export interface EquipmentDetail extends Equipment {
 }
 
 export interface Alert { id: string; equipment_id: string; severity: RiskLevel | "info" | "warning"; title: string; created_at: string; }
+
+export interface ScorecardModel {
+  model: string;
+  title: string;
+  dataset?: string;
+  algorithm?: string;
+  serve_mode?: string;
+  metrics: Record<string, string | number | null>;
+  sample_label?: string | null;
+  recorded?: Record<string, number | boolean>;
+  live_inference?: Record<string, unknown> | null;
+}
+export interface Scorecard { models: ScorecardModel[]; count: number; }

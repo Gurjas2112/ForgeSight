@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowRight } from "lucide-react";
 import { getAlerts, getEquipment } from "@/lib/api";
 import type { Alert, Equipment } from "@/lib/types";
 import { StatusBadge } from "@/components/ui";
+import { ModelScorecard } from "@/components/ModelScorecard";
 import { AuthGuard } from "@/components/AuthGuard";
 
 function tileState(e: Equipment): { sev: string; label: string } {
@@ -78,6 +79,8 @@ function Overview() {
           </div>
         </div>
       )}
+
+      <ModelScorecard />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Alert, ChatResponse, Equipment, EquipmentDetail } from "./types";
+import type { Alert, ChatResponse, Equipment, EquipmentDetail, Scorecard } from "./types";
 import { getSupabase } from "./supabase";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -19,6 +19,7 @@ export const getEquipment = () => fetch(`${API}/equipment`, { cache: "no-store" 
 export const getEquipmentDetail = (id: string) =>
   fetch(`${API}/equipment/${id}`, { cache: "no-store" }).then(j<EquipmentDetail>);
 export const getAlerts = () => fetch(`${API}/alerts`, { cache: "no-store" }).then(j<Alert[]>);
+export const getScorecard = () => fetch(`${API}/models/scorecard`, { cache: "no-store" }).then(j<Scorecard>);
 
 export const postChat = async (body: {
   message: string; equipment_id?: string; session_id?: string; role?: string;
