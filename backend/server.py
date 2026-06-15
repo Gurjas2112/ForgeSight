@@ -16,8 +16,10 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
+from psycopg.types.json import Json
 from pydantic import BaseModel
 
 from backend.agent.build import build_controller
@@ -41,8 +43,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ForgeSight API", version="1.0", lifespan=lifespan)
+_origins = [o.strip() for o in get_settings().allowed_origins.split(",") if o.strip()]
 app.add_middleware(
-    CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    CORSMiddleware, allow_origins=_origins,
     allow_methods=["*"], allow_headers=["*"])
 
 
@@ -58,6 +61,14 @@ class ChatIn(BaseModel):
 class ApproveIn(BaseModel):
     session_id: str
     approved: bool
+
+
+class FeedbackIn(BaseModel):
+    verdict: Literal["up", "down", "fixed"]
+    equipment_id: str | None = None
+    fault_code: str | None = None
+    note: str | None = None
+    session_id: str | None = None
 
 
 # ---------------- helpers ----------------
@@ -171,6 +182,34 @@ def evidence(ref: str) -> dict:
                        "(priority matrix, vibration trend, or anomaly scan). Not a document."}
 
 
+@app.post("/feedback")
+def feedback(body: FeedbackIn) -> dict:
+    """FR-6 — feedback-driven improvement. Capture up/down/fixed; a 'fixed' verdict flips the
+    matching breakdown record to engineer-verified (earns the green chip) and logs it. Agent
+    suggestions and confirmed facts are never conflated — only human-verified records turn green."""
+    verified_ref = None
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO feedback (verdict, note, equipment_id) VALUES (%s, %s, %s) RETURNING id",
+            (body.verdict, body.note, body.equipment_id))
+        fid = cur.fetchone()[0]
+        if body.verdict == "fixed" and body.equipment_id:
+            # flip the matching (or most recent) breakdown record for this equipment to verified
+            cur.execute(
+                "UPDATE breakdown_history SET verified = true "
+                "WHERE id = (SELECT id FROM breakdown_history WHERE equipment_id = %s "
+                "  AND (%s::text IS NULL OR fault_code = %s) ORDER BY occurred_at DESC LIMIT 1) "
+                "RETURNING id", (body.equipment_id, body.fault_code, body.fault_code))
+            row = cur.fetchone()
+            verified_ref = row[0] if row else None
+            cur.execute(
+                "INSERT INTO logbook (equipment_id, author_type, entry_type, content) "
+                "VALUES (%s, 'human', 'fix_confirmed', %s)",
+                (body.equipment_id, Json({"note": body.note, "fault_code": body.fault_code,
+                                          "verified_record": verified_ref})))
+    return {"ok": True, "feedback_id": str(fid), "verified_record": verified_ref}
+
+
 @app.get("/alerts")
 def alerts() -> list[dict]:
     with STATE["pool"].connection() as conn, conn.cursor() as cur:
@@ -178,3 +217,44 @@ def alerts() -> list[dict]:
                     "ORDER BY created_at DESC LIMIT 20")
         return [{"id": str(r[0]), "equipment_id": r[1], "severity": r[2], "title": r[3],
                  "created_at": str(r[4])} for r in cur.fetchall()]
+
+
+# ---------------- §5.4 reports (ReportLab PDF) ----------------
+
+@app.get("/reports/alert")
+def report_alert(equipment_id: str) -> Response:
+    """Abnormal-alert PDF report for one equipment (health + open alerts + related history)."""
+    from backend.tools.reports import generate_alert_report
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, name, zone, criticality FROM equipment WHERE id=%s", (equipment_id,))
+        e = cur.fetchone()
+        if not e:
+            raise HTTPException(404, "unknown equipment")
+        equipment = {"id": e[0], "name": e[1], "zone": e[2], "criticality": e[3]}
+        cur.execute("SELECT anomaly_score, is_anomalous, rul_days, contributing_sensors "
+                    "FROM equipment_health WHERE equipment_id=%s", (equipment_id,))
+        hr = cur.fetchone()
+        health = ({"anomaly_score": hr[0], "is_anomalous": hr[1], "rul_days": hr[2],
+                   "contributing_sensors": hr[3]} if hr else None)
+        cur.execute("SELECT severity, title, created_at FROM alerts WHERE equipment_id=%s "
+                    "ORDER BY created_at DESC LIMIT 12", (equipment_id,))
+        al = [{"severity": r[0], "title": r[1], "created_at": r[2]} for r in cur.fetchall()]
+        cur.execute("SELECT id, occurred_at, fault_code, root_cause, verified FROM breakdown_history "
+                    "WHERE equipment_id=%s ORDER BY occurred_at DESC LIMIT 5", (equipment_id,))
+        bd = [{"id": r[0], "occurred_at": str(r[1]), "fault_code": r[2], "root_cause": r[3],
+               "verified": r[4]} for r in cur.fetchall()]
+    pdf = generate_alert_report(equipment=equipment, health=health, alerts=al, breakdowns=bd)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="alert_{equipment_id}.pdf"'})
+
+
+@app.get("/reports/shift-summary")
+def report_shift() -> Response:
+    """Plant-wide shift summary PDF (open alerts across the plant)."""
+    from backend.tools.reports import draft_shift_summary
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT severity, equipment_id, title FROM alerts ORDER BY created_at DESC LIMIT 15")
+        al = [{"severity": r[0], "equipment_id": r[1], "title": r[2]} for r in cur.fetchall()]
+    pdf = draft_shift_summary(alerts=al)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="shift_summary.pdf"'})

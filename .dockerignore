@@ -1,0 +1,28 @@
+# Keep the backend image small — only backend/ (incl. backend/models artifacts) is copied.
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ipynb_checkpoints
+
+# Frontend is deployed separately (Vercel)
+frontend
+node_modules
+
+# Datasets / notebooks / training code are not needed at serve time
+data/raw
+data/synthetic
+ml
+finetune
+docs
+*.ipynb
+
+# Local env + plans
+.env
+.env.local
+.claude
+*.md
+
+# NOTE: do NOT ignore backend/models/*.joblib — they are the served ML artifacts.

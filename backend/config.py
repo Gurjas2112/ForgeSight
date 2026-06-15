@@ -27,6 +27,22 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     hosted_llm_api_key: str = ""
 
+    # --- synthesis backend (on-prem Ollama by default; hosted API for cloud deploy) ---
+    # "ollama" -> local Qwen via Ollama (default, on-prem). "hosted" -> LLM_PROVIDER API
+    # (used on Fly.io where Ollama isn't reachable). Set SYNTHESIS_BACKEND=hosted as a deploy secret.
+    synthesis_backend: Literal["ollama", "hosted"] = "ollama"
+    llm_provider: Literal["openai"] = "openai"
+    llm_model: str = "gpt-4o-mini"
+    llm_api_key: str = ""
+
+    # --- retrieval (hybrid vector+full-text locally; full-text-only when no cloud embeddings) ---
+    retrieval_mode: Literal["hybrid", "fulltext"] = "hybrid"
+
+    # --- CORS (CSV of allowed frontend origins) ---
+    allowed_origins: str = (
+        "http://localhost:3000,http://127.0.0.1:3000,https://forge-sight-one.vercel.app"
+    )
+
     # --- database / supabase ---
     database_url: str = ""                       # postgresql://... (Supabase pooler URI)
     supabase_url: str = Field(

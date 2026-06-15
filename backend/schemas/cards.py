@@ -112,6 +112,20 @@ class SparesCard(_Card):
 
 
 # ----------------------------------------------------------------------------------
+# Analytical retrieval card (§1.7b governed text-to-SQL) — the SQL IS the citation
+# ----------------------------------------------------------------------------------
+
+class SqlCard(_Card):
+    card_type: Literal["sql"] = "sql"
+    question: str                                # the natural-language question
+    sql: str                                     # the generated, validated SELECT (visible = explainable)
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list] = Field(default_factory=list)   # result rows (verbatim from the DB)
+    narration: str                               # one-line plain summary
+    # citation_refs carries the SQL string itself (Citation kind="sql_query")
+
+
+# ----------------------------------------------------------------------------------
 # Honest-failure / control cards (not LLM-generated; bypass the output guard)
 # ----------------------------------------------------------------------------------
 
@@ -149,6 +163,7 @@ CARD_SCHEMAS: dict[str, type[BaseModel]] = {
     "wait_assessment": WaitAssessmentCard,
     "priority": PriorityCard,
     "spares": SparesCard,
+    "sql": SqlCard,
     "no_evidence": NoEvidenceCard,
     "degraded": DegradedCard,
     "denied": DeniedCard,

@@ -33,8 +33,8 @@ def build_controller(pool=None, *, checkpointer=None, persistence=None,
 
     authority = AgentAuthority(audit_sink=audit_sink)
     guards = AgentGuardrails()
-    sub_agents = build_sub_agents(authority, pool)
     llm = OllamaSynthesizer()
+    sub_agents = build_sub_agents(authority, pool, llm)
     caches = CacheChain(demo_cache=demo_cache, demo_mode=settings.demo_mode)
     persist = persistence or NullPersistence()
 

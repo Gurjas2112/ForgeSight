@@ -7,6 +7,8 @@ Each model is a self-contained directory with a runnable `train.py`, its `export
 - `failure_classifier/` — XGBoost on AI4I 2020 → `failure_xgb_v1.json`, `feature_order.json`
 - `rul/` — XGBoost on C-MAPSS FD001 (split by unit) → `rul_xgb_v1.joblib`
 - `defect/` — LightGBM leakage-safe pipeline on UCI Steel Plates → `defect_pipeline_v1.joblib` + `threshold.json`
+- `azure_pdm/` — XGBoost 24h-ahead failure prediction on Microsoft Azure PdM (100 machines, 2015;
+  multi-source telemetry+errors+machines features, time-based split) → `failure_azure_xgb_v1.json`
 - `bearing_features/` — CWRU/IMS RMS/kurtosis/crest/skew extraction (`extract_features.py`; runs on a
   committed deterministic sample if no Kaggle data) → `bearing_features.csv`
 - `shared/feature_config.json` — train/serve parity (read by `train.py` AND `backend/tools/ml_tools.py`)
@@ -23,6 +25,7 @@ reproduces byte-identical `submission.csv` files.
 | failure_classifier | AI4I 2020 | F1 0.678 · recall 0.909 · PR-AUC 0.799 |
 | rul | C-MAPSS FD001 | holdout RMSE 16.39 · **official test RMSE 18.73** (100 units) |
 | defect | UCI Steel Plates | PR-AUC 0.798 · threshold 0.9752 |
+| azure_pdm | Azure PdM (100 machines) | PR-AUC 0.899 · recall 0.922 · F1 0.702 (24h-ahead) |
 
 ## test/submission CSV dimensions (the deliverable)
 Each model dir holds `test.csv` (inputs, no label), `submission.csv` (predictions),
@@ -35,6 +38,7 @@ Each model dir holds `test.csv` (inputs, no label), `submission.csv` (prediction
 | failure_classifier | 2000 × 6 | 2000 × 3 | `id, failure_prob, failure_pred` |
 | rul | 100 × 47 | 100 × 2 | `unit, rul_pred` |
 | defect | 389 × 29 | 389 × 3 | `id, defect_prob, defect_pred` |
+| azure_pdm | 73900 × 21 | 73900 × 3 | `id, failure_prob, failure_pred` |
 
 `rul/submission.csv` is the canonical C-MAPSS FD001 test set (100 engine units), aligned to
 `data/raw/cmapss/RUL_FD001.txt`.

@@ -57,6 +57,33 @@ ORDER BY score DESC
 LIMIT %(k)s;
 """
 
+# Full-text-only retrieval — used when no embedding backend is reachable (e.g. on Fly.io,
+# where on-prem Ollama embeddings aren't available). Keeps citations REAL (chunks come from the
+# DB); an ILIKE fallback guarantees exact tokens like fault codes / part numbers still match even
+# when websearch_to_tsquery yields no lexemes.
+FULLTEXT_SQL = """
+SELECT id, content, section_ref, doc_type, source,
+       ts_rank(to_tsvector('english', content), websearch_to_tsquery('english', %(q)s)) AS score
+FROM doc_chunks
+WHERE (%(eq)s::text IS NULL OR equipment_id = %(eq)s::text OR equipment_id IS NULL)
+  AND (%(dt)s::text[] IS NULL OR doc_type::text = ANY(%(dt)s))
+  AND (to_tsvector('english', content) @@ websearch_to_tsquery('english', %(q)s)
+       OR content ILIKE %(like)s OR section_ref ILIKE %(like)s)
+ORDER BY score DESC
+LIMIT %(k)s;
+"""
+
+
+def _embed_query(query: str) -> str | None:
+    """Embed a query for vector search; return None if the embedding backend is unreachable."""
+    if _settings.retrieval_mode == "fulltext":
+        return None
+    try:
+        qv = _emb.embed_query(query)
+        return "[" + ",".join(f"{x:.6f}" for x in qv) + "]"
+    except Exception:  # noqa: BLE001 — any embedding failure → fall back to full-text
+        return None
+
 
 def _doc_type_to_kind(doc_type: str, section_ref: str) -> str:
     if doc_type == "manual":
@@ -68,11 +95,14 @@ def _doc_type_to_kind(doc_type: str, section_ref: str) -> str:
 
 def retrieve_rag(conn, query: str, equipment_id: str | None = None,
                  doc_types: list[str] | None = None, k: int = 8) -> list[RetrievedChunk]:
-    qv = _emb.embed_query(query)
-    vec_literal = "[" + ",".join(f"{x:.6f}" for x in qv) + "]"
+    vec_literal = _embed_query(query)
     with conn.cursor() as cur:
-        cur.execute(HYBRID_SQL, {"qv": vec_literal, "eq": equipment_id,
-                                 "dt": doc_types, "q": query, "k": k})
+        if vec_literal is None:                       # full-text-only (no cloud embeddings)
+            cur.execute(FULLTEXT_SQL, {"eq": equipment_id, "dt": doc_types,
+                                       "q": query, "like": f"%{query}%", "k": k})
+        else:
+            cur.execute(HYBRID_SQL, {"qv": vec_literal, "eq": equipment_id,
+                                     "dt": doc_types, "q": query, "k": k})
         rows = cur.fetchall()
     chunks = [RetrievedChunk(str(r[0]), r[1], r[2], r[3], r[4], float(r[5])) for r in rows]
     return sorted(chunks, key=lambda c: c.id)            # stable for prefix/KV cache

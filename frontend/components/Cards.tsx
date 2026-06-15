@@ -130,6 +130,29 @@ export function CardView({ card, onOpenEvidence }: { card: Card; onOpenEvidence:
       </Shell>
     );
 
+  if (t === "sql")
+    return (
+      <Shell byline="analyst_agent" tag="governed SQL">
+        <p className="text-sm text-[#c3ced9] mb-2">{card.narration}</p>
+        <pre className="text-[11px] mono text-[#9fb0c0] bg-[#0E1116] border border-[#232B35] rounded p-2 overflow-x-auto whitespace-pre-wrap">{card.sql}</pre>
+        {card.columns && card.columns.length > 0 && (
+          <div className="mt-2 overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead><tr className="text-[#8B98A5] text-left">{card.columns.map((c) => <th key={c} className="pr-3 pb-1 font-medium">{c}</th>)}</tr></thead>
+              <tbody>
+                {card.rows?.slice(0, 10).map((row, i) => (
+                  <tr key={i} className="border-t border-[#232B35]">
+                    {row.map((cell, j) => <td key={j} className="pr-3 py-1 mono text-[#c3ced9]">{cell === null ? "—" : String(cell)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-[10px] text-[#8B98A5] mt-2">Read-only query over curated views · the SQL is the citation.</p>
+      </Shell>
+    );
+
   if (t === "no_evidence")
     return <Shell byline="orchestrator"><div className="flex items-center gap-2 text-sm text-[#E8B931]"><AlertTriangle size={15} />{card.message}</div></Shell>;
 

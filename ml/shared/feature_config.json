@@ -32,5 +32,13 @@
     "n_repeats": 2,
     "f_beta": 3.0,
     "random_state": 42
+  },
+  "azure_pdm": {
+    "sensors": ["volt", "rotate", "pressure", "vibration"],
+    "roll_window_hours": 24,
+    "predict_horizon_hours": 24,
+    "downsample_hours": 3,
+    "test_split_date": "2015-10-01",
+    "random_state": 42
   }
 }

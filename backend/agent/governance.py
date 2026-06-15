@@ -134,6 +134,19 @@ AGENT_CHARTERS: dict[str, AgentCharter] = {
         action_classes=frozenset({ActionClass.READ, ActionClass.COMMIT}),
         data_scopes=frozenset({"spares", "equipment_health"}),
     ),
+    "analyst_agent": AgentCharter(
+        name="analyst_agent",
+        persona_prompt=(
+            "You are the Analyst Agent. You answer analytical questions over maintenance records "
+            "and logs by generating a single read-only SELECT against curated views. The SQL is "
+            "always shown as the citation; you never write data and never state a number absent "
+            "from the returned rows."
+        ),
+        allowed_tools=frozenset({"query_records"}),
+        action_classes=frozenset({ActionClass.READ}),
+        data_scopes=frozenset({"v_breakdown_stats", "v_spares_status",
+                               "v_alert_feed", "v_downtime_by_equipment"}),
+    ),
 }
 
 ESCALATION_REQUIRED: frozenset[ActionClass] = frozenset({ActionClass.COMMIT})
@@ -318,6 +331,7 @@ INTENT_AGENT_MAP: dict[str, list[str]] = {
     "priority_query":  ["supervisor_agent"],
     "spares_query":    ["planner_agent"],
     "report_request":  ["supervisor_agent"],
+    "analytical_query": ["analyst_agent"],
     "wait_assessment": ["reliability_agent", "planner_agent", "supervisor_agent"],
 }
 
@@ -352,6 +366,15 @@ class AgentController:
                 "target_agents": INTENT_AGENT_MAP.get(intent, ["diagnostic_agent"])}
 
     def synthesize(self, state: ForgeState) -> dict:
+        # §1.7b analytical queries: the SqlCard is assembled DETERMINISTICALLY from the
+        # query_records tool output (rows are verbatim DB data — the SLM never regenerates them).
+        if state.get("intent") == "analytical_query":
+            qr = (state.get("tool_results", {}) or {}).get("query_records") or {}
+            card = {"card_type": "sql", "question": qr.get("question", _last_user_text(state)),
+                    "sql": qr.get("sql", ""), "columns": qr.get("columns", []),
+                    "rows": qr.get("rows", []), "narration": qr.get("narration", ""),
+                    "citation_refs": [qr["sql"]] if qr.get("sql") else []}
+            return {"draft_card": card, "consumed": Budget(llm_calls=0)}
         card = self.llm.synthesize_card(
             intent=state["intent"],
             tool_results=state.get("tool_results", {}),

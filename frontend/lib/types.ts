@@ -28,6 +28,8 @@ export interface Card {
   factors?: { name: string; raw: number; weight: number; contribution: number }[]; rationale?: string;
   // spares
   part_no?: string; stock_qty?: number; lead_time_days?: number; procurement_note?: string; proposal?: string;
+  // sql (analytical)
+  question?: string; sql?: string; columns?: string[]; rows?: (string | number | boolean | null)[][]; narration?: string;
   // honest-failure
   message?: string;
 }

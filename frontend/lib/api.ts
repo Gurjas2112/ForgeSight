@@ -24,3 +24,14 @@ export const postApprove = (session_id: string, approved: boolean) =>
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id, approved }),
   }).then(j<ChatResponse>);
+
+export const postFeedback = (body: {
+  verdict: "up" | "down" | "fixed"; equipment_id?: string; fault_code?: string;
+  note?: string; session_id?: string;
+}) =>
+  fetch(`${API}/feedback`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }).then(j<{ ok: boolean; feedback_id: string; verified_record: string | null }>);
+
+export const reportUrl = (equipment_id: string) =>
+  `${API}/reports/alert?equipment_id=${encodeURIComponent(equipment_id)}`;

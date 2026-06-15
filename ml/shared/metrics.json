@@ -38,5 +38,23 @@
     "pr_auc": 0.798,
     "threshold": 0.9752,
     "threshold_basis": "precision@recall>=0.7"
+  },
+  "azure_pdm": {
+    "algorithm": "XGBoost (24h-ahead)",
+    "trained_on": "Azure PdM (100 machines, 2015)",
+    "split": "time-based (<2015-10-01 train)",
+    "positive_rate": 0.0221,
+    "failure_f1": 0.702,
+    "failure_recall": 0.922,
+    "pr_auc": 0.899,
+    "n_features": 18,
+    "top_features": [
+      "err_24h",
+      "pressure_rm24",
+      "rotate_rm24",
+      "vibration_rm24",
+      "volt_rm24",
+      "pressure"
+    ]
   }
 }

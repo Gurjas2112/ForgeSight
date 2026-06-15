@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { getEquipmentDetail } from "@/lib/api";
+import { ArrowLeft, FileDown } from "lucide-react";
+import { getEquipmentDetail, reportUrl } from "@/lib/api";
 import type { EquipmentDetail } from "@/lib/types";
 import { RulCountdown, StatusBadge } from "@/components/ui";
 import { SensorTrend } from "@/components/SensorTrend";
@@ -34,7 +34,13 @@ export function EquipmentView({ id }: { id: string }) {
                 <div className="text-xs text-[#8B98A5] mono">{d.id} · {d.zone} · criticality {d.criticality}</div>
                 <div className="mt-2"><StatusBadge label={sev === "ok" ? "HEALTHY" : sev.toUpperCase()} sev={sev} /></div>
               </div>
-              {h?.rul_days != null && <RulCountdown days={h.rul_days} />}
+              <div className="flex flex-col items-end gap-2">
+                {h?.rul_days != null && <RulCountdown days={h.rul_days} />}
+                <a href={reportUrl(d.id)} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-[#1C232C] border border-[#232B35] text-[#9fb0c0] hover:border-[#4A90D9]">
+                  <FileDown size={13} /> Alert report (PDF)
+                </a>
+              </div>
             </div>
             {h && (
               <div className="grid grid-cols-3 gap-3">
@@ -47,7 +53,7 @@ export function EquipmentView({ id }: { id: string }) {
             <div className="panel p-3 text-xs text-[#8B98A5]">
               <span className="text-[#E6EDF3] font-medium">About the models:</span> anomaly = IsolationForest + EWMA (recall 1.0, 8.7d lead) ·
               RUL = trend extrapolation (XGBoost C-MAPSS RMSE 16.4 validates the method) · failure = XGBoost AI4I (recall 0.91) ·
-              defect = LightGBM leakage-safe (PR-AUC 0.80). Every claim cited; every score deterministic.
+              defect = LightGBM leakage-safe (PR-AUC 0.80) · Azure PdM 24h-ahead = XGBoost (PR-AUC 0.90, recall 0.92). Every claim cited; every score deterministic.
             </div>
           </>
         )}

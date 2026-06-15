@@ -28,6 +28,7 @@ from backend.tools.deterministic import procurement_rule, score_priority
 from backend.tools.ml_tools import check_equipment_health, estimate_rul
 from backend.tools.rag import match_history, retrieve_rag, to_citations
 from backend.tools.spares import check_spares
+from backend.tools.text_to_sql import query_records
 
 _FAULT_RE = re.compile(r"\b([A-Z]{2,}-[A-Z0-9-]*\d{2,}|[A-Z]?\d{3,5})\b")
 
@@ -229,11 +230,36 @@ def make_planner_pipeline(authority: AgentAuthority, pool) -> RunnableLambda:
     return RunnableLambda(_run, name=agent)
 
 
-def build_sub_agents(authority: AgentAuthority, pool) -> dict[str, RunnableLambda]:
-    """Name → pipeline runnable, consumed by AgentController. All four chartered agents."""
+def make_analyst_pipeline(authority: AgentAuthority, pool, llm=None) -> RunnableLambda:
+    """Analyst Agent (§1.7b): query_records — governed text-to-SQL over curated read-only views.
+    The generated SELECT is the citation; rows are returned verbatim (no SLM number invention)."""
+    agent = "analyst_agent"
+
+    def _run(state: dict) -> dict:
+        user = state["user"]
+        query = _last_user_text(state)
+        deleg, cites, tr = [], [], {}
+        with pool.connection() as conn:
+            authority.check_tool(agent, "query_records", ActionClass.READ, user)
+            authority.check_budget(agent, state.get("consumed") or Budget())
+            result = query_records(conn, query, llm=llm)
+            tr["query_records"] = result
+            if result.get("sql"):
+                cites.append(Citation(kind="sql_query", ref=result["sql"]))
+            deleg.append(DelegationEvent(
+                agent=agent, text=f"querying records — {result.get('narration', '')[:60]}"))
+        return {"delegations": deleg, "citations": cites, "tool_results": tr,
+                "consumed": Budget(tool_calls=1)}
+
+    return RunnableLambda(_run, name=agent)
+
+
+def build_sub_agents(authority: AgentAuthority, pool, llm=None) -> dict[str, RunnableLambda]:
+    """Name → pipeline runnable, consumed by AgentController. All five chartered agents."""
     return {
         "diagnostic_agent": make_diagnostic_pipeline(authority, pool),
         "reliability_agent": make_reliability_pipeline(authority, pool),
         "supervisor_agent": make_supervisor_pipeline(authority, pool),
         "planner_agent": make_planner_pipeline(authority, pool),
+        "analyst_agent": make_analyst_pipeline(authority, pool, llm),
     }

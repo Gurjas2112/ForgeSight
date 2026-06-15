@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Send, X, Bot, ChevronRight } from "lucide-react";
-import { postApprove, postChat } from "@/lib/api";
+import { Send, X, Bot, ChevronRight, ThumbsUp, ThumbsDown, Check } from "lucide-react";
+import { postApprove, postChat, postFeedback } from "@/lib/api";
 import type { Card, Delegation } from "@/lib/types";
 import { CardView } from "./Cards";
 
@@ -82,6 +82,9 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
                 </div>
               )}
               <CardView card={m.card} onOpenEvidence={openEvidence} />
+              <FeedbackBar equipmentId={equipmentId}
+                faultCode={(m.card as { fault?: string }).fault}
+                cardType={(m.card as { card_type?: string }).card_type} />
               {m.pending && (
                 <div className="panel p-3 bg-[#E8B93114] border-[#E8B93155] slidein">
                   <div className="text-sm font-medium text-[#E8B931] mb-1">Approval required</div>
@@ -105,7 +108,7 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
       </div>
 
       <div className="p-3 border-t border-[#232B35] flex flex-wrap gap-1.5">
-        {["diagnose the F3 trip", "can it wait till Sunday?", "what should we tackle first?", "is the SKF 22230 in stock?"].map((q) => (
+        {["diagnose the F3 trip", "can it wait till Sunday?", "what should we tackle first?", "which equipment had the most downtime?"].map((q) => (
           <button key={q} onClick={() => ask(q)} disabled={busy}
             className="text-[11px] px-2 py-1 rounded bg-[#1C232C] border border-[#232B35] text-[#9fb0c0] hover:border-[#4A90D9] disabled:opacity-40">{q}</button>
         ))}
@@ -128,6 +131,32 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** FR-6 — feedback capture. 'Fixed it' flips the matching breakdown record to engineer-verified. */
+function FeedbackBar({ equipmentId, faultCode, cardType }:
+  { equipmentId: string; faultCode?: string; cardType?: string }) {
+  const [sent, setSent] = useState<string>();
+  if (cardType === "degraded" || cardType === "no_evidence") return null;
+  async function send(verdict: "up" | "down" | "fixed") {
+    try {
+      const r = await postFeedback({ verdict, equipment_id: equipmentId, fault_code: faultCode });
+      setSent(verdict === "fixed"
+        ? `✓ Saved to ${equipmentId} logbook${r.verified_record ? ` · ${r.verified_record} verified` : ""}`
+        : "Thanks — feedback recorded");
+    } catch { setSent("Could not save feedback"); }
+  }
+  if (sent) return <div className="text-[10px] text-[#3FB68B] pl-1">{sent}</div>;
+  return (
+    <div className="flex items-center gap-2 pl-1 text-[#8B98A5]">
+      <span className="text-[10px]">Helpful?</span>
+      <button type="button" title="Helpful" onClick={() => send("up")} className="hover:text-[#3FB68B]"><ThumbsUp size={13} /></button>
+      <button type="button" title="Not helpful" onClick={() => send("down")} className="hover:text-[#E5484D]"><ThumbsDown size={13} /></button>
+      <button type="button" onClick={() => send("fixed")}
+        className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1C232C] border border-[#232B35] hover:border-[#3FB68B] hover:text-[#3FB68B]">
+        <Check size={11} /> This fixed it</button>
     </div>
   );
 }

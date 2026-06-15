@@ -39,7 +39,7 @@ INTENT_CARD: dict[str, type[BaseModel]] = {
     "wait_assessment": WaitAssessmentCard,
 }
 
-INTENTS = list(INTENT_CARD) + ["report_request"]
+INTENTS = list(INTENT_CARD) + ["report_request", "analytical_query"]
 QUERY_CLASSES = ["knowledge", "live_status", "action"]
 CITATION_REQUIRED_INTENTS = {"diagnosis", "sop_lookup", "health_query", "wait_assessment"}
 
@@ -64,27 +64,39 @@ _CLASSIFY_SCHEMA = {
 
 
 class OllamaSynthesizer:
-    """Concrete `llm` passed to AgentController."""
+    """Concrete `llm` passed to AgentController.
+
+    Backend is selected by `SYNTHESIS_BACKEND`:
+      - "ollama" (default): on-prem Qwen2.5-3B via Ollama, constrained decoding (citation
+        compliance is STRUCTURAL — the grammar can only emit retrieved refs).
+      - "hosted": a cloud LLM API (OpenAI) for deployments where Ollama isn't reachable (Fly.io).
+        Same prompts + JSON schema; citation compliance is instruction-enforced and still
+        re-checked by the downstream guardrail (uncited claims → repair/degrade).
+    The class name is kept for backwards-compat with build_controller wiring.
+    """
 
     def __init__(self, model: str | None = None, host: str | None = None):
         s = get_settings()
-        self.model = model or s.ollama_model
-        self._client = ollama.Client(host=host or s.ollama_host)
+        self._backend = s.synthesis_backend
+        if self._backend == "hosted":
+            from openai import OpenAI  # lazy: not needed for on-prem runs
+            self._openai = OpenAI(api_key=s.llm_api_key)
+            self.model = model or s.llm_model
+        else:
+            self.model = model or s.ollama_model
+            self._client = ollama.Client(host=host or s.ollama_host)
 
     # ---- T1: intent + query-class classification --------------------------------------
     def classify(self, text: str, equipment_id: str | None) -> tuple[str, str]:
         sys_msg = (
             "Classify the maintenance query. intent ∈ " + ", ".join(INTENTS) + ". "
+            "Use 'analytical_query' for questions that COUNT or AGGREGATE over records/logs "
+            "(how many, most common root cause, total downtime, list/most/which across equipment). "
             "query_class: 'knowledge' (manuals/SOPs/diagnosis), 'live_status' (current health/RUL/"
             "sensors), or 'action' (reserve/order/report). Output only JSON."
         )
         user = (f"EQUIPMENT: {equipment_id or '(none)'}\nUSER QUERY: {text}")
-        resp = self._client.chat(
-            model=self.model, format=_CLASSIFY_SCHEMA, options={"temperature": 0},
-            messages=[{"role": "system", "content": sys_msg},
-                      {"role": "user", "content": user}],
-        )
-        data = _loads(resp["message"]["content"])
+        data = self._chat_json(_CLASSIFY_SCHEMA, sys_msg, user, temperature=0)
         intent = data.get("intent") if data.get("intent") in INTENTS else "diagnosis"
         qclass = data.get("query_class") if data.get("query_class") in QUERY_CLASSES else "knowledge"
         return intent, qclass
@@ -148,17 +160,37 @@ class OllamaSynthesizer:
             # This is the design's "schema-invalid output is impossible" principle applied to
             # the anti-hallucination gate — base Qwen-3B then cannot omit or fabricate a ref.
             schema = _constrain_citation_refs(schema, allowed_refs)
-        resp = self._client.chat(
-            model=self.model, format=schema,
-            options={"temperature": 0.1},
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}],
-        )
-        data = _loads(resp["message"]["content"])
+        data = self._chat_json(schema, system, user, temperature=0.1)
         default_ct = getattr(card_model.model_fields.get("card_type"), "default", None)
         if default_ct and not data.get("card_type"):
             data["card_type"] = default_ct
         return data
+
+    # ---- backend-agnostic constrained JSON chat --------------------------------------
+    def _chat_json(self, schema: dict, system: str, user: str, *, temperature: float) -> dict:
+        """One JSON-schema-constrained chat turn, dispatched to the configured backend."""
+        if self._backend == "hosted":
+            return self._openai_chat_json(schema, system, user, temperature)
+        resp = self._client.chat(
+            model=self.model, format=schema, options={"temperature": temperature},
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": user}],
+        )
+        return _loads(resp["message"]["content"])
+
+    def _openai_chat_json(self, schema: dict, system: str, user: str, temperature: float) -> dict:
+        """OpenAI hosted fallback. Uses JSON mode + schema-in-prompt (robust across schema
+        shapes); the enum-constrained `citation_refs` is described to the model and the
+        downstream guardrail still validates ref existence."""
+        sys_msg = (system + "\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n"
+                   + json.dumps(schema, ensure_ascii=False))
+        resp = self._openai.chat.completions.create(
+            model=self.model, temperature=temperature,
+            response_format={"type": "json_object"},
+            messages=[{"role": "system", "content": sys_msg},
+                      {"role": "user", "content": user}],
+        )
+        return _loads(resp.choices[0].message.content or "")
 
 
 def _constrain_citation_refs(schema: dict, allowed: list[str]) -> dict:
