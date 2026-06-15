@@ -41,6 +41,7 @@ class AuthUser(BaseModel):
 class Budget(BaseModel):
     tool_calls: int = 0
     llm_calls: int = 0
+    reset: bool = False     # a reset=True delta REPLACES the accumulator (turn-start), not sums
 
 
 # ---- reducers (concurrent Send branches merge safely) ----
@@ -55,5 +56,9 @@ def merge_dicts(left: dict | None, right: dict | None) -> dict:
 
 def sum_budget(left: "Budget | None", right: "Budget | None") -> "Budget":
     l, r = left or Budget(), right or Budget()
+    # The budget is per-TURN. The entry node emits a reset delta so the checkpointed accumulator
+    # starts each turn at zero; within a turn the parallel sub-agent branches still sum normally.
+    if r.reset:
+        return Budget(tool_calls=r.tool_calls, llm_calls=r.llm_calls)
     return Budget(tool_calls=l.tool_calls + r.tool_calls,
                   llm_calls=l.llm_calls + r.llm_calls)

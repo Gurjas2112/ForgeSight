@@ -353,7 +353,9 @@ class AgentController:
         report = self.guards.guard_input(state)
         if not report.passed and "unauthenticated" in report.violations:
             raise AuthorityError("No authenticated user in state")
-        return {"guard_report": report}
+        # Reset the per-turn tool/LLM budget: the checkpointer persists `consumed` across turns in a
+        # session, so without this the cap accumulates and later turns get spuriously denied.
+        return {"guard_report": report, "consumed": Budget(reset=True)}
 
     def cache_lookup(self, state: ForgeState) -> dict:
         hit = self.caches.lookup(_last_user_text(state), state.get("equipment_id"),
