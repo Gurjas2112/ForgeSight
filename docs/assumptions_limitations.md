@@ -4,8 +4,10 @@
 **Benchmarks validate the method; the simulation validates the system.** ML methods are trained
 and scored on real public run-to-failure / fault datasets (NASA C-MAPSS, AI4I 2020, UCI Steel
 Plates, CWRU/IMS bearings); the integrated maintenance system is demonstrated on a physics-informed
-synthetic steel layer (6 equipment, injected fan-bearing degradation + an F3 VFD trip), because no
-real steel-plant sensor stream is publicly available.
+**digital twin** of a steel plant (6 equipment, injected fan-bearing degradation + an F3 VFD trip),
+because no real steel-plant sensor stream is publicly available. The twin is labelled as such in the
+UI (dashboard + equipment headers, landing copy) — the simulated sensors are an owned design choice;
+the governance, ML inference, and reasoning that run on top of them are real.
 
 ## Assumptions
 - **Synthetic sensor layer.** 30 days × 5-min readings per equipment; the sinter-fan degradation
@@ -20,6 +22,11 @@ real steel-plant sensor stream is publicly available.
   coverage; the pipeline already handles them.
 - **Demo accounts** are seeded pre-confirmed (`engineer@demo` / `admin@demo`); email verification
   is ON for self-registration, OFF for seeds — stated prototype posture.
+- **Public signup is engineer-only.** `POST /auth/signup` only mints the `engineer` role for
+  unauthenticated callers; an `admin` request is downgraded unless a valid admin Bearer token is
+  presented (`require_admin`). Admin accounts are provisioned by an administrator / the seeder. The
+  enforced security boundary is backend JWT verification on every request (`backend/auth/jwt.py`),
+  not the client-side `AuthGuard` (which is UX-only).
 
 ## Limitations
 - **Anomaly precision.** IsolationForest favours recall (1.0, 8.7 d lead time) over precision
@@ -58,6 +65,17 @@ real steel-plant sensor stream is publicly available.
 - **Text-to-SQL (§1.7b).** `query_records` is template-first (deterministic, demo-safe) with an
   optional SLM pass validated by the same SELECT-only + whitelist + EXPLAIN guards, so an unreliable
   3B model can never emit an unsafe or hallucinated query; it reaches only four curated read-only views.
+- **Plant KPIs are computed, not hardcoded.** The dashboard header (availability · assets alerting ·
+  downtime-at-risk) is served by `GET /plant/summary` (`backend/tools/plant_summary.py`, pure +
+  unit-tested). Availability = criticality-weighted share of plant capacity not under active downtime
+  risk; downtime-at-risk = Σ(expected_downtime_hrs × `BASE_INR_PER_HR` × criticality) over at-risk
+  assets, where expected hours come from `v_downtime_by_equipment` history (default 8 h). The
+  `BASE_INR_PER_HR` cost rate is a **documented assumption** returned in the response's `assumptions`
+  field, so the headline ₹ figure is traceable. Open-alert count is distinct alerting assets (the
+  scheduler re-inserts each scan, so a raw row count would be noise).
+- **Honest agent activity.** The copilot shows a neutral "Running governed pipeline…" indicator while
+  a turn executes, then renders the **real** agent delegations returned by the graph — there is no
+  scripted/fabricated "thinking" stream.
 - **Scenarios.** A (diagnosis incl. Evidence Drawer), B (early warning, RUL, wait-assessment fan-out,
   HITL), C (priority, spares) are end-to-end. Now also: **FR-6 feedback** (verified-chip loop),
   **§5.4 PDF reports**, **§1.7b analytical text-to-SQL**. Admin Console / Plant `/simulate` UI screens

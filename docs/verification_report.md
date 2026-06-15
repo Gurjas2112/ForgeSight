@@ -107,3 +107,31 @@ no dead `forgesight-v3-final` / `BUILD_GUIDE` / `sft-dataset-spec` links remain:
   (PR-AUC 0.899) using the downloaded `PdM_*.csv`. The dead-link fix removed the inaccurate "not
   used by any code path" clause, but the "template" header could be refreshed to reflect that the
   model is now live if desired.
+
+---
+
+## Hardening pass — 2026-06-16 (remove the 4 flagged weaknesses)
+
+A follow-up critique flagged four credibility weaknesses. All addressed; verified locally
+(`pytest backend/tests -q` → **37 passed**; `npx tsc --noEmit` clean; `next build` clean;
+`GET /plant/summary` live against Supabase, deterministic).
+
+1. **Real computed dashboard KPIs** (was `92%` / `₹18L` hardcoded). New pure `backend/tools/
+   plant_summary.py` + `GET /plant/summary`. Live values: **availability 84.3%**, **1 asset
+   alerting** (deduped from 140 raw scheduler rows), **at-risk 1**, **₹13L** downtime-at-risk —
+   all derived from `equipment_health` + `v_downtime_by_equipment` + open alerts, with the cost
+   assumption returned in the `assumptions` field. Re-call identical. Unit-tested
+   (`backend/tests/test_plant_summary.py`).
+2. **Honest agent activity** (was a fabricated `setTimeout` "thinking" stream in `Sidebar.tsx`).
+   Removed; replaced with a neutral "Running governed pipeline…" busy indicator. The real
+   `delegations` from the graph still render.
+3. **Auth hardening** (was: public signup could self-assign `admin`). `POST /auth/signup` now
+   downgrades an `admin` request to `engineer` unless a valid admin Bearer token is present;
+   `require_admin` dependency added; the frontend signup role selector removed. Pinned by
+   `backend/tests/test_auth_gating.py`. Backend JWT verification remains the enforced boundary.
+4. **Digital-twin transparency** (synthetic data is now an owned, labelled choice). "Digital twin ·
+   simulated sensors" badge on the dashboard + equipment headers; explicit twin framing in the
+   landing hero/CTA; documented in `assumptions_limitations.md`.
+
+**Note:** these changes are verified locally; the public Vercel/Railway URLs reflect them only after
+a redeploy (Railway backend + `vercel --prod`), which needs the user's deploy auth.
