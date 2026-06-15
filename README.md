@@ -24,19 +24,20 @@ Secrets now live only in `.env` (gitignored). `.env.example` is the redacted tem
 
 ## Build status
 
-This repo is built in passes following `BUILD_GUIDE.md`. **Pass 1 (current)** delivers the
-foundation + the Scenario A vertical slice (fault code → cited `DiagnosisCard`):
+This repo delivers the full system. Per-requirement mapping is in
+[`docs/requirements_traceability.md`](docs/requirements_traceability.md); deployment in
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-| Phase | Component | Status |
-|---|---|---|
-| 1 | Datasets + corpus (`data/`) | ✅ Pass 1 |
-| 4 | Supabase schema + RLS (`backend/db/`) | ✅ Pass 1 |
-| 4 | Card schemas, RAG + deterministic tools | ✅ Pass 1 |
-| 4 | Governed graph — Diagnostic pipeline | ✅ Pass 1 |
-| 2 | ML notebooks + artifacts (`ml/`) | ⏳ deferred |
-| 3 | SLM fine-tune (`finetune/`) | ⏳ deferred (base Qwen2.5-3B for now) |
-| 4 | Reliability / Supervisor / Planner pipelines | ⏳ deferred |
-| 5 | Frontend (`frontend/`, Next.js 15 + CopilotKit) | ⏳ deferred |
+| Component | Status |
+|---|---|
+| Datasets + corpus (`data/`) + Supabase schema/RLS (`backend/db/`) | ✅ |
+| 5 ML models (`ml/`: anomaly · failure · RUL · defect · **azure_pdm**) + bearing features; each with a `test.csv`→`submission.csv` | ✅ |
+| SLM fine-tune pipeline (`finetune/`) — base Qwen2.5-3B ships per promotion rule | ✅ pipeline (GPU run deferred) |
+| Governed graph — 5 chartered pipelines (Diagnostic · Reliability · Supervisor · Planner · **Analyst**) | ✅ |
+| FastAPI server: `/chat` · `/chat/approve` (HITL) · `/equipment` · `/alerts` · `/evidence` · **`/feedback`** · **`/reports/*`** | ✅ |
+| §1.7b governed text-to-SQL · §5.4 ReportLab PDF reports · FR-6 feedback loop | ✅ |
+| Frontend (`frontend/`, Next.js 16 + React 19) | ✅ |
+| Deploy: backend → Fly.io (Docker validated) · frontend → Vercel | ✅ ready (`docs/DEPLOY.md`) |
 
 ---
 
@@ -65,7 +66,10 @@ uv run python ml/anomaly/train.py
 uv run python ml/failure_classifier/train.py
 uv run python ml/rul/train.py
 uv run python ml/defect/train.py
+uv run python ml/azure_pdm/train.py                  # 5th model: Azure PdM 24h-ahead (PR-AUC 0.90)
+uv run python ml/bearing_features/extract_features.py # vibration features (committed sample if no CWRU)
 cp ml/shared/feature_config.json ml/shared/metrics.json backend/models/
+# each ml/<model>/ now also holds a Kaggle-style test.csv → submission.csv (see ml/README.md)
 
 # 3. (optional) Fine-tune — runs on Colab/GPU; base Qwen ships otherwise
 uv run python finetune/dataset/generate_sft.py && uv run python finetune/dataset/quality_gates.py

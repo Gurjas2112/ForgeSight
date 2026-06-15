@@ -33,9 +33,21 @@ real steel-plant sensor stream is publicly available.
 - **CopilotKit.** The conversational sidebar implements the CoAgents pattern (delegation stream,
   cards, HITL approval, Evidence Trail) with a reliable direct-to-API transport rather than the
   CopilotKit runtime, to stay compatible with Next.js 16 / React 19 under the deadline.
-- **Deployment.** Demo runs locally (frontend + FastAPI + Ollama + local pgvector or Supabase).
-  The honest production split (frontend → Vercel, stateful backend → always-on container, SLM →
-  GPU host, Postgres → Supabase) is documented in `forgesight-v3-final.md §1.12`.
-- **Scenarios.** A (diagnosis) is fully end-to-end incl. Evidence Drawer; B (early warning, RUL,
-  wait-assessment fan-out, HITL) and C (priority, spares) are wired and demoable; Reports/Admin
-  Console/Plant /simulate UI screens are scoped out of this build.
+- **Deployment.** Frontend → Vercel, stateful backend → Fly.io (Docker image validated), Postgres
+  +pgvector → Fly Postgres or Supabase (`docs/DEPLOY.md`). On the cloud backend there is no local
+  Ollama, so synthesis uses the **OpenAI hosted fallback** (`SYNTHESIS_BACKEND=hosted`) and RAG runs
+  **full-text-primary** (`RETRIEVAL_MODE=fulltext`) — citations stay real (chunks come from the DB).
+  The supplied OpenAI key authenticates but currently has **no quota**, so free-form synthesis on the
+  public URL degrades to the **golden demo cache** (scripted F3 diagnosis + fan wait-assessment) and
+  all deterministic/DB-backed endpoints until billing is added; **locally synthesis runs live on
+  Ollama Qwen2.5-3B**.
+- **Azure PdM model.** `ml/azure_pdm/` is a real 24h-ahead failure classifier (XGBoost, time-based
+  split, PR-AUC 0.90/recall 0.92) — it validates a second, multi-source PdM method; it is not on the
+  per-equipment serving path (validation-only, like the C-MAPSS RUL and AI4I failure models).
+- **Text-to-SQL (§1.7b).** `query_records` is template-first (deterministic, demo-safe) with an
+  optional SLM pass validated by the same SELECT-only + whitelist + EXPLAIN guards, so an unreliable
+  3B model can never emit an unsafe or hallucinated query; it reaches only four curated read-only views.
+- **Scenarios.** A (diagnosis incl. Evidence Drawer), B (early warning, RUL, wait-assessment fan-out,
+  HITL), C (priority, spares) are end-to-end. Now also: **FR-6 feedback** (verified-chip loop),
+  **§5.4 PDF reports**, **§1.7b analytical text-to-SQL**. Admin Console / Plant `/simulate` UI screens
+  and Langfuse tracing remain scoped out.
