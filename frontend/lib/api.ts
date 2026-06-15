@@ -1,4 +1,4 @@
-import type { Alert, ChatResponse, Equipment, EquipmentDetail, Scorecard } from "./types";
+import type { Alert, ChatResponse, Equipment, EquipmentDetail, PlantSummary, Scorecard } from "./types";
 import { getSupabase } from "./supabase";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -19,6 +19,7 @@ export const getEquipment = () => fetch(`${API}/equipment`, { cache: "no-store" 
 export const getEquipmentDetail = (id: string) =>
   fetch(`${API}/equipment/${id}`, { cache: "no-store" }).then(j<EquipmentDetail>);
 export const getAlerts = () => fetch(`${API}/alerts`, { cache: "no-store" }).then(j<Alert[]>);
+export const getPlantSummary = () => fetch(`${API}/plant/summary`, { cache: "no-store" }).then(j<PlantSummary>);
 export const getScorecard = () => fetch(`${API}/models/scorecard`, { cache: "no-store" }).then(j<Scorecard>);
 
 export const postChat = async (body: {
@@ -45,7 +46,7 @@ export const postFeedback = async (body: {
   }).then(j<{ ok: boolean; feedback_id: string; verified_record: string | null }>);
 
 export const postSignup = (body: {
-  email: string; password: string; full_name?: string; role: "engineer" | "admin";
+  email: string; password: string; full_name?: string; role?: "engineer";
 }) =>
   fetch(`${API}/auth/signup`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

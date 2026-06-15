@@ -59,6 +59,15 @@ export interface EquipmentDetail extends Equipment {
 
 export interface Alert { id: string; equipment_id: string; severity: RiskLevel | "info" | "warning"; title: string; created_at: string; }
 
+export interface PlantSummary {
+  availability_pct: number;
+  open_alerts: number;
+  at_risk_count: number;
+  downtime_at_risk_inr: number;
+  downtime_at_risk_label: string;
+  assumptions: Record<string, string | number>;
+}
+
 export interface ScorecardModel {
   model: string;
   title: string;

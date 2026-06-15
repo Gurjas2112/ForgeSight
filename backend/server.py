@@ -114,6 +114,13 @@ def current_user(authorization: str | None = Header(default=None)) -> AuthUser:
     return user_from_header(authorization)
 
 
+def require_admin(user: AuthUser = Depends(current_user)) -> AuthUser:
+    """Gate a route to authenticated admins (agents propose; only admins provision)."""
+    if user.role != "admin":
+        raise HTTPException(403, "admin only")
+    return user
+
+
 # ---------------- helpers ----------------
 
 def _serialize(result: dict) -> dict:
@@ -149,11 +156,19 @@ def healthz() -> dict:
 
 
 @app.post("/auth/signup")
-def signup(body: SignupIn) -> dict:
-    """Create a pre-confirmed Supabase user (engineer|admin) + mirror into profiles."""
+def signup(body: SignupIn, authorization: str | None = Header(default=None)) -> dict:
+    """Create a pre-confirmed Supabase user + mirror into profiles.
+
+    Public signup is **engineer-only**. Creating an admin requires an authenticated admin caller
+    (Bearer token) — this closes the self-assign-admin hole; the route, not just the GoTrue helper,
+    now enforces authorization. Seeded `admin@demo.forgesight` remains the reliable admin path.
+    """
     from backend.auth.supabase_admin import create_user
+    role = body.role
+    if role == "admin" and user_from_header(authorization).role != "admin":
+        role = "engineer"  # downgrade unauthorized admin requests rather than 500
     try:
-        u = create_user(body.email, body.password, body.role, body.full_name)
+        u = create_user(body.email, body.password, role, body.full_name)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(400, f"signup failed: {e}")
     try:
@@ -161,7 +176,7 @@ def signup(body: SignupIn) -> dict:
             cur.execute(
                 "INSERT INTO profiles (id, full_name, role) VALUES (%s, %s, %s) "
                 "ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, full_name = EXCLUDED.full_name",
-                (u["id"], body.full_name or body.email.split("@")[0], body.role))
+                (u["id"], body.full_name or body.email.split("@")[0], role))
     except Exception:  # noqa: BLE001 — profile mirror is best-effort
         pass
     return {"ok": True, **u}
@@ -307,6 +322,28 @@ def alerts() -> list[dict]:
                     "ORDER BY created_at DESC LIMIT 20")
         return [{"id": str(r[0]), "equipment_id": r[1], "severity": r[2], "title": r[3],
                  "created_at": str(r[4])} for r in cur.fetchall()]
+
+
+@app.get("/plant/summary")
+def plant_summary() -> dict:
+    """Plant KPI header: criticality-weighted availability, open-alert count, and a
+    downtime-at-risk estimate — all computed deterministically from live plant state (no
+    hardcoded numbers). The cost model is a documented assumption (see the `assumptions` field)."""
+    from backend.tools.plant_summary import compute_plant_summary
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT e.id, e.criticality, h.is_anomalous, h.rul_days "
+                    "FROM equipment e LEFT JOIN equipment_health h ON h.equipment_id=e.id")
+        eq = [{"id": r[0], "criticality": r[1], "is_anomalous": r[2], "rul_days": r[3]}
+              for r in cur.fetchall()]
+        cur.execute("SELECT equipment_id, total_downtime_hrs, breakdowns FROM v_downtime_by_equipment")
+        dt = [{"equipment_id": r[0], "total_downtime_hrs": r[1], "breakdowns": r[2]}
+              for r in cur.fetchall()]
+        # one row per alerting asset (highest open severity) — the scheduler re-inserts each scan,
+        # so a raw row count is noise; distinct alerting equipment is the meaningful headline.
+        cur.execute("SELECT equipment_id, max(severity) FROM alerts WHERE acked_at IS NULL "
+                    "GROUP BY equipment_id")
+        al = [{"equipment_id": r[0], "severity": r[1]} for r in cur.fetchall()]
+    return compute_plant_summary(eq, dt, al)
 
 
 # ---------------- §5.4 reports (ReportLab PDF) ----------------
