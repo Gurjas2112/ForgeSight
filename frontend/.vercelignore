@@ -2,3 +2,13 @@ node_modules
 .next
 .env*
 *.log
+.vercel
+.git
+**/__pycache__
+backend
+ml
+data
+finetune
+docs
+*.md
+!README.md
