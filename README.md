@@ -37,7 +37,7 @@ This repo delivers the full system. Per-requirement mapping is in
 | FastAPI server: `/chat` · `/chat/approve` (HITL) · `/equipment` · `/alerts` · `/evidence` · **`/feedback`** · **`/reports/*`** | ✅ |
 | §1.7b governed text-to-SQL · §5.4 ReportLab PDF reports · FR-6 feedback loop | ✅ |
 | Frontend (`frontend/`, Next.js 16 + React 19) | ✅ |
-| Deploy: backend → Fly.io (Docker validated) · frontend → Vercel | ✅ ready (`docs/DEPLOY.md`) |
+| Deploy: backend → Railway (Docker validated) · frontend → Vercel | ✅ ready (`docs/DEPLOY.md`) |
 
 ---
 

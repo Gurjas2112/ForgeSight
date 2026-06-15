@@ -69,9 +69,9 @@ class OllamaSynthesizer:
     Backend is selected by `SYNTHESIS_BACKEND`:
       - "ollama" (default): on-prem Qwen2.5-3B via Ollama, constrained decoding (citation
         compliance is STRUCTURAL — the grammar can only emit retrieved refs).
-      - "hosted": a cloud LLM API (OpenAI) for deployments where Ollama isn't reachable (Fly.io).
-        Same prompts + JSON schema; citation compliance is instruction-enforced and still
-        re-checked by the downstream guardrail (uncited claims → repair/degrade).
+      - "hosted": a cloud LLM API (Groq or OpenAI, OpenAI-compatible SDK) for deployments
+        where Ollama isn't reachable (Railway). Same prompts + JSON schema; citation
+        compliance is instruction-enforced and still re-checked by the downstream guardrail.
     The class name is kept for backwards-compat with build_controller wiring.
     """
 
@@ -79,8 +79,10 @@ class OllamaSynthesizer:
         s = get_settings()
         self._backend = s.synthesis_backend
         if self._backend == "hosted":
-            from openai import OpenAI  # lazy: not needed for on-prem runs
-            self._openai = OpenAI(api_key=s.llm_api_key)
+            from openai import OpenAI  # lazy: Groq + OpenAI both use this SDK
+            base = s.hosted_llm_base_url()
+            self._openai = OpenAI(api_key=s.llm_api_key, base_url=base) if base else OpenAI(
+                api_key=s.llm_api_key)
             self.model = model or s.llm_model
         else:
             self.model = model or s.ollama_model
@@ -179,9 +181,9 @@ class OllamaSynthesizer:
         return _loads(resp["message"]["content"])
 
     def _openai_chat_json(self, schema: dict, system: str, user: str, temperature: float) -> dict:
-        """OpenAI hosted fallback. Uses JSON mode + schema-in-prompt (robust across schema
-        shapes); the enum-constrained `citation_refs` is described to the model and the
-        downstream guardrail still validates ref existence."""
+        """Hosted API fallback (Groq/OpenAI via OpenAI-compatible SDK). JSON mode + schema-in-prompt;
+        the enum-constrained `citation_refs` is described to the model and the downstream
+        guardrail still validates ref existence."""
         sys_msg = (system + "\n\nReturn ONLY a JSON object that conforms to this JSON Schema:\n"
                    + json.dumps(schema, ensure_ascii=False))
         resp = self._openai.chat.completions.create(

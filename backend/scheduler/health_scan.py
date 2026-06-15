@@ -14,6 +14,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+try:                                      # Windows consoles default to cp1252
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+except Exception:  # noqa: BLE001
+    pass
+
 from backend.db.connection import get_pool  # noqa: E402
 from backend.tools.deterministic import severity_rule  # noqa: E402
 from backend.tools.ml_tools import check_equipment_health, estimate_rul  # noqa: E402

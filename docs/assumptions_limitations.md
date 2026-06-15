@@ -33,14 +33,13 @@ real steel-plant sensor stream is publicly available.
 - **CopilotKit.** The conversational sidebar implements the CoAgents pattern (delegation stream,
   cards, HITL approval, Evidence Trail) with a reliable direct-to-API transport rather than the
   CopilotKit runtime, to stay compatible with Next.js 16 / React 19 under the deadline.
-- **Deployment.** Frontend → Vercel, stateful backend → Fly.io (Docker image validated), Postgres
-  +pgvector → Fly Postgres or Supabase (`docs/DEPLOY.md`). On the cloud backend there is no local
-  Ollama, so synthesis uses the **OpenAI hosted fallback** (`SYNTHESIS_BACKEND=hosted`) and RAG runs
+- **Deployment.** Frontend → Vercel, stateful backend → Railway (Docker image validated), Postgres
+  +pgvector → Supabase (`docs/DEPLOY.md`). On the cloud backend there is no local
+  Ollama, so synthesis uses the **Groq hosted fallback** (`SYNTHESIS_BACKEND=hosted`,
+  `LLM_PROVIDER=groq`, `llama-3.3-70b-versatile` via OpenAI-compatible API) and RAG runs
   **full-text-primary** (`RETRIEVAL_MODE=fulltext`) — citations stay real (chunks come from the DB).
-  The supplied OpenAI key authenticates but currently has **no quota**, so free-form synthesis on the
-  public URL degrades to the **golden demo cache** (scripted F3 diagnosis + fan wait-assessment) and
-  all deterministic/DB-backed endpoints until billing is added; **locally synthesis runs live on
-  Ollama Qwen2.5-3B**.
+  Scripted demo scenarios also hit the **golden demo cache** when synthesis is slow or unavailable;
+  **locally synthesis runs live on Ollama Qwen2.5-3B**.
 - **Azure PdM model.** `ml/azure_pdm/` is a real 24h-ahead failure classifier (XGBoost, time-based
   split, PR-AUC 0.90/recall 0.92) — it validates a second, multi-source PdM method; it is not on the
   per-equipment serving path (validation-only, like the C-MAPSS RUL and AI4I failure models).

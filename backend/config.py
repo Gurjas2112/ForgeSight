@@ -29,11 +29,20 @@ class Settings(BaseSettings):
 
     # --- synthesis backend (on-prem Ollama by default; hosted API for cloud deploy) ---
     # "ollama" -> local Qwen via Ollama (default, on-prem). "hosted" -> LLM_PROVIDER API
-    # (used on Fly.io where Ollama isn't reachable). Set SYNTHESIS_BACKEND=hosted as a deploy secret.
+    # (Groq or OpenAI on Railway where Ollama isn't reachable). Set SYNTHESIS_BACKEND=hosted.
     synthesis_backend: Literal["ollama", "hosted"] = "ollama"
-    llm_provider: Literal["openai"] = "openai"
-    llm_model: str = "gpt-4o-mini"
+    llm_provider: Literal["openai", "groq"] = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
+    llm_base_url: str = ""   # auto: groq → https://api.groq.com/openai/v1
     llm_api_key: str = ""
+
+    def hosted_llm_base_url(self) -> str | None:
+        """OpenAI-compatible base URL for the configured hosted provider."""
+        if self.llm_base_url:
+            return self.llm_base_url
+        if self.llm_provider == "groq":
+            return "https://api.groq.com/openai/v1"
+        return None
 
     # --- retrieval (hybrid vector+full-text locally; full-text-only when no cloud embeddings) ---
     retrieval_mode: Literal["hybrid", "fulltext"] = "hybrid"

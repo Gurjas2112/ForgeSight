@@ -6,7 +6,7 @@ Legend: ✅ implemented & verified · ◐ implemented with a stated caveat · �
 ## §6 Functional Requirements
 | FR | Requirement | Status | Where it lives |
 |----|-------------|--------|----------------|
-| FR-1 | Contextual reasoning via LLM/SLM (merit: fine-tune; APIs allowed) | ✅ | SLM-first runtime `backend/agent/synthesis.py` (Ollama Qwen2.5-3B, `format=`-constrained); OpenAI hosted fallback for cloud; **fine-tune pipeline** `finetune/` (Unsloth QLoRA, 40-pair gated dataset) — base ships per promotion rule |
+| FR-1 | Contextual reasoning via LLM/SLM (merit: fine-tune; APIs allowed) | ✅ | SLM-first runtime `backend/agent/synthesis.py` (Ollama Qwen2.5-3B, `format=`-constrained); **Groq** hosted fallback for cloud (`LLM_PROVIDER=groq`); **fine-tune pipeline** `finetune/` — base ships per promotion rule |
 | FR-2 | Knowledge integration over manuals/SOPs/records/logs | ✅ | Hybrid metadata-filtered RAG `backend/tools/rag.py` over `doc_chunks`; **governed text-to-SQL** `backend/tools/text_to_sql.py` for analytical/aggregate questions over curated views |
 | FR-3 | Natural-language, multi-turn, context-aware | ✅ | `/chat` + LangGraph checkpointer (thread = session); history summarization in `synthesis.py` |
 | FR-4 | Explainable, traceable recommendations | ✅ | Citation-existence guardrail `backend/agent/governance.py`; Evidence Trail chips → `/evidence` drawer; visible SQL as citation |
@@ -58,8 +58,8 @@ Legend: ✅ implemented & verified · ◐ implemented with a stated caveat · �
 ## Caveats (honest)
 - **Fine-tune** runs on Colab/GPU; runtime ships base Qwen under constrained decoding (citation
   compliance is structural). Promotion rule in `finetune/export/README.md`.
-- **Cloud synthesis** uses the OpenAI fallback; the provided key authenticates but has **no quota**,
-  so free-form generation on the public URL degrades to the golden demo cache until billing is added.
-  Locally, synthesis runs live on Ollama. (`docs/assumptions_limitations.md`)
+- **Cloud synthesis** uses the **Groq** hosted fallback (`llama-3.3-70b-versatile` via OpenAI-compatible API).
+  Scripted scenarios also hit the golden demo cache. Locally, synthesis runs live on Ollama.
+  (`docs/assumptions_limitations.md`)
 - **Out of build scope** (designed, not built): Reports/Admin/Plant `/simulate` UI screens, Langfuse
   tracing, semantic cache — see `docs/assumptions_limitations.md`.
