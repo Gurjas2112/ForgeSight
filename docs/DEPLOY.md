@@ -13,18 +13,18 @@ vercel login                 # already authenticated as gurjas2112 in this envir
 ## 1. Backend → Fly.io
 ```bash
 # from repo root (fly.toml is here; it points build → backend/Dockerfile)
-flyctl apps create forge-sight-api          # or: flyctl launch --no-deploy --copy-config
+flyctl apps create forgesight          # or: flyctl launch --no-deploy --copy-config
 
 # --- Database (choose ONE) ---
 # A) Fly Postgres (needs a card on the Fly org):
 flyctl postgres create --name forge-sight-db --region iad --vm-size shared-cpu-1x --volume-size 1
-flyctl postgres attach forge-sight-db -a forge-sight-api     # sets DATABASE_URL secret
+flyctl postgres attach forge-sight-db -a forgesight     # sets DATABASE_URL secret
 #    then enable pgvector once: flyctl postgres connect -a forge-sight-db -c "CREATE EXTENSION IF NOT EXISTS vector;"
 # B) Supabase (no Fly billing; pgvector built-in) — set the pooler URI yourself:
-flyctl secrets set DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres" -a forge-sight-api
+flyctl secrets set DATABASE_URL="postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres" -a forgesight
 
 # --- Secrets (synthesis fallback) ---
-flyctl secrets set LLM_API_KEY="sk-..." -a forge-sight-api   # OpenAI key (needs billing/quota for live synthesis)
+flyctl secrets set LLM_API_KEY="sk-..." -a forgesight   # OpenAI key (needs billing/quota for live synthesis)
 
 # --- Schema + seeds + health scan (run once against the prod DB) ---
 #  point a local shell at the prod DB URL and run the same idempotent scripts:
@@ -33,9 +33,9 @@ python backend/db/apply_migrations.py        # schema + RLS + seeds + corpus + s
 python backend/scheduler/health_scan.py --once   # equipment_health + the CRITICAL fan alert
 
 # --- Deploy ---
-flyctl deploy -a forge-sight-api
-flyctl status -a forge-sight-api
-curl https://forge-sight-api.fly.dev/healthz   # {"ok":true,"db":true,...}
+flyctl deploy -a forgesight
+flyctl status -a forgesight
+curl https://forgesight.fly.dev/healthz   # {"ok":true,"db":true,...}
 ```
 
 Backend env (already in `fly.toml`): `SYNTHESIS_BACKEND=hosted`, `RETRIEVAL_MODE=fulltext`,
@@ -47,7 +47,7 @@ DB-backed endpoints (`/equipment`, `/alerts`, `/evidence`, `/reports/*`, determi
 ```bash
 cd frontend
 vercel link --project prj_bagyErlJEr4cYV2DAuAzv2178Q5X   # links to the existing forge-sight-one project
-vercel env add NEXT_PUBLIC_API_URL production            # value: https://forge-sight-api.fly.dev
+vercel env add NEXT_PUBLIC_API_URL production            # value: https://forgesight.fly.dev
 vercel --prod
 ```
 If the Vercel project auto-deploys from GitHub `main`, instead set `NEXT_PUBLIC_API_URL` in the
@@ -57,7 +57,7 @@ Vercel dashboard (Project → Settings → Environment Variables) and push the `
 ## 3. Verify the live demo
 `https://forge-sight-one.vercel.app` → Plant Overview (F3 critical tile) → F3 detail →
 "diagnose the F3 trip" → DiagnosisCard + Evidence drawer → Sinter Fan #2 → "can it wait till
-Sunday?" → WaitAssessment + Approve. Browser network calls should hit `forge-sight-api.fly.dev`
+Sunday?" → WaitAssessment + Approve. Browser network calls should hit `forgesight.fly.dev`
 with no CORS errors.
 
 ## Notes

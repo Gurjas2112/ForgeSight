@@ -1,6 +1,6 @@
 # ForgeSight backend on Fly.io. Deploy: fly deploy (after `fly auth login` + Postgres attach).
 # See docs/DEPLOY.md for the full sequence (Postgres create/attach + secrets + migrations).
-app = "forge-sight-api"
+app = "forgesight"
 primary_region = "iad"
 
 [build]
