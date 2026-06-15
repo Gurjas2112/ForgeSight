@@ -53,6 +53,13 @@ DB-backed endpoints (`/equipment`, `/alerts`, `/evidence`, `/reports/*`, determi
 ```bash
 cd frontend
 vercel link --project prj_bagyErlJEr4cYV2DAuAzv2178Q5X
+```
+
+**Critical (monorepo):** In the [Vercel project settings](https://vercel.com/gurjas2112s-projects/forge-sight/settings),
+set **Root Directory** to `frontend`, then **Redeploy** from the latest `main` commit (GitHub is already
+connected). Without this, builds run at the repo root and production returns 404.
+
+Set **production** env vars (Project → Settings → Environment Variables):
 vercel env add NEXT_PUBLIC_API_URL production   # value: https://forgesight-api-production.up.railway.app
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
