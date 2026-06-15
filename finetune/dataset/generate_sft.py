@@ -35,26 +35,65 @@ DIAG_PHRASINGS = [
     "why did {eq} trip on {code} pls diagnose",
     "kindly tell the root cause of {code} on {eq}",
     "{code} fault came on {eq}, what to check",
+    "root cause analysis for {code} on the {eq}",
+    "{eq} threw {code} again — diagnose pls",
+    "what causes {code} on {eq}? cite past cases",
 ]
 SOP_PHRASINGS = [
     "how do I check the braking resistor?",
     "steps to inspect braking resistor",
     "give me the LOTO procedure for the resistor check",
     "braking resistor inspection steps na",
+    "what's the safe procedure to test the F3 braking resistor",
+    "resistor check SOP with lockout steps",
 ]
 INTENT_SAMPLES = [
     ("diagnose F3 fault 0247", "diagnosis", "knowledge"),
+    ("why did the caster trip on mould level", "diagnosis", "knowledge"),
+    ("root cause of the stove high dome temperature", "diagnosis", "knowledge"),
     ("how do I check the braking resistor", "sop_lookup", "knowledge"),
+    ("show me the ladle crane brake inspection procedure", "sop_lookup", "knowledge"),
+    ("what's the LOTO procedure for the ID fan bearing", "sop_lookup", "knowledge"),
     ("what's the current health of sinter fan 2", "health_query", "live_status"),
+    ("is the caster running normal right now", "health_query", "live_status"),
     ("estimate RUL for the ID fan", "rul_query", "live_status"),
+    ("how long till the F3 stand needs attention", "rul_query", "live_status"),
     ("can it wait till Sunday's shutdown", "wait_assessment", "live_status"),
+    ("is it safe to keep the fan running till the weekend", "wait_assessment", "live_status"),
     ("what should we tackle first tonight", "priority_query", "live_status"),
+    ("rank tonight's jobs by urgency", "priority_query", "live_status"),
     ("is the SKF 22230 bearing in stock", "spares_query", "live_status"),
+    ("do we have the crane brake linings spare", "spares_query", "live_status"),
     ("generate the shift summary report", "report_request", "action"),
 ]
 
-EQUIP = {"hsm-f3-stand": ("F3 stand", "HSM-F3-VFD-0247"),
-         "sinter-fan-2": ("sinter ID fan 2", "SNT-FAN-VIB-HI")}
+# Equipment used for the live-status cards (health / RUL): display name + primary fault code.
+EQUIP = {
+    "hsm-f3-stand":  ("F3 stand", "HSM-F3-VFD-0247"),
+    "sinter-fan-2":  ("sinter ID fan 2", "SNT-FAN-VIB-HI"),
+    "sinter-fan-1":  ("sinter ID fan 1", "SNT-FAN-VIB-HI"),
+    "caster-1":      ("caster 1", "CAST-MOLD-LVL-12"),
+    "bf-stove-a":    ("blast furnace stove A", "BF-STOVE-TEMP-HI"),
+    "ladle-crane-4": ("ladle crane 4", "CRN-BRAKE-WEAR"),
+}
+
+# Diagnosis cases: (equipment_id, display name, fault_code) — every code below has real breakdown
+# records in the seeded corpus, so retrieval returns genuine evidence and the target card is grounded.
+DIAG_CASES = [
+    ("hsm-f3-stand", "F3 stand", "HSM-F3-VFD-0247"),
+    ("hsm-f3-stand", "F3 stand", "HSM-F3-VFD-2310"),
+    ("hsm-f3-stand", "F3 stand", "HSM-F3-LUB-LO"),
+    ("sinter-fan-2", "sinter ID fan 2", "SNT-FAN-VIB-HI"),
+    ("sinter-fan-2", "sinter ID fan 2", "SNT-FAN-MOT-OT"),
+    ("sinter-fan-1", "sinter ID fan 1", "SNT-FAN-VIB-HI"),
+    ("sinter-fan-1", "sinter ID fan 1", "SNT-FAN-IMB"),
+    ("caster-1", "caster 1", "CAST-MOLD-LVL-12"),
+    ("caster-1", "caster 1", "CAST-HYD-PRES-LO"),
+    ("bf-stove-a", "blast furnace stove A", "BF-STOVE-TEMP-HI"),
+    ("bf-stove-a", "blast furnace stove A", "BF-STOVE-VLV-FAIL"),
+    ("ladle-crane-4", "ladle crane 4", "CRN-BRAKE-WEAR"),
+    ("ladle-crane-4", "ladle crane 4", "CRN-HOIST-OT"),
+]
 
 
 def _chat(system: str, user: str, assistant: dict) -> dict:
@@ -94,10 +133,12 @@ def main() -> int:
                 {"intent": intent, "query_class": qclass}))
 
     with pool.connection() as conn:
-        # T2 — DiagnosisCard (real retrieval + history)
-        for eq, (name, code) in EQUIP.items():
+        # T2 — DiagnosisCard (real retrieval + history) across every asset + real fault code.
+        for eq, name, code in DIAG_CASES:
             sop = retrieve_rag(conn, code, equipment_id=eq, doc_types=["manual", "sop"], k=4)
             recs = match_history(conn, equipment_id=eq, fault_code=code, symptoms=code, k=4)
+            if not recs:                      # skip any case that has no grounded evidence
+                continue
             cites = to_citations(sop) + to_citations(recs)
             cite_dicts = [{"ref": c.ref, "excerpt": ""} for c in cites]
             tool_results = {"_equipment": {"id": eq, "name": name},
@@ -128,9 +169,61 @@ def main() -> int:
                                  citations=[{"ref": r, "excerpt": ""} for r in sop_refs], user_query=phr)
             samples.append(_chat(DIAG_PERSONA, user, checklist))
 
+        # T3b — more ChecklistCards (LOTO-first) grounded in the per-asset SOPs.
+        extra_checklists = [
+            ("sinter-fan-2", "ID fan bearing condition check", "ID fan bearing vibration check LOTO",
+             ["how do I check the ID fan bearing", "ID fan bearing vibration procedure",
+              "steps to assess fan 2 bearing condition", "fan bearing check SOP with lockout"],
+             [{"text": "Apply LOTO to the ID fan motor; confirm full coast-down.", "safety": True},
+              {"text": "Measure DE/NDE vibration (mm/s RMS) per ISO 10816.", "safety": False,
+               "expected": "alarm 7.1, trip 11.0 mm/s"},
+              {"text": "Trend over 14 days before deciding; increase sampling near alarm.", "safety": False},
+              {"text": "If replacing, reserve the SKF 22230 spare first.", "safety": False}]),
+            ("ladle-crane-4", "Hoist brake inspection", "ladle crane hoist brake inspection LOTO",
+             ["how do I inspect the ladle crane hoist brake", "crane brake inspection steps",
+              "ladle crane 4 brake check procedure", "hoist brake SOP with lockout"],
+             [{"text": "Land the ladle / empty the hook, apply LOTO to the hoist, chock the trolley.",
+               "safety": True},
+              {"text": "Never inspect a brake under suspended load.", "safety": True},
+              {"text": "Measure lining thickness; replace below 3 mm (new 8 mm).", "safety": False,
+               "expected": ">= 3 mm"},
+              {"text": "Check air-gap 0.5-0.7 mm; function-test with a rated load.", "safety": False}]),
+            ("caster-1", "Mould oscillator hydraulic check", "caster mould oscillator hydraulic LOTO",
+             ["how do I check the caster mould oscillator hydraulics", "mould level hydraulic procedure",
+              "caster hydraulic pressure check steps", "oscillator SOP with lockout"],
+             [{"text": "Apply LOTO to the hydraulic power unit; bleed accumulator to zero pressure.",
+               "safety": True},
+              {"text": "Mechanically restrain the mould oscillator before any line break.", "safety": True},
+              {"text": "Verify system pressure 150-160 bar at the HPU gauge.", "safety": False,
+               "expected": "150-160 bar"},
+              {"text": "Inspect servo valve and accumulator pre-charge (90 bar N2).", "safety": False}]),
+            ("bf-stove-a", "Hot-blast stove changeover", "stove dome temperature changeover LOTO",
+             ["how do I handle high dome temperature on stove A", "stove changeover valve procedure",
+              "blast furnace stove dome temp check", "stove gas isolation SOP with lockout"],
+             [{"text": "Isolate the burner gas line and apply LOTO; purge before valve work.",
+               "safety": True},
+              {"text": "Confirm dome thermocouples read true before relighting.", "safety": True},
+              {"text": "Dome limit 1420 C; reduce gas/air ratio on high-dome alarm.", "safety": False,
+               "expected": "<= 1420 C"},
+              {"text": "Stroke-test the changeover valve and confirm full seating.", "safety": False}]),
+        ]
+        for eq, title, q_seed, phrasings, steps in extra_checklists:
+            sop_c = retrieve_rag(conn, q_seed, equipment_id=eq, doc_types=["sop"], k=4)
+            refs_c = [c.ref for c in to_citations(sop_c)]
+            if not refs_c:
+                continue
+            card_c = {"card_type": "checklist", "title": title, "steps": steps,
+                      "citation_refs": refs_c[:2]}
+            tr_c = {"_equipment": {"id": eq, "name": eq}, "retrieve_rag": [{"ref": r} for r in refs_c]}
+            for phr in phrasings:
+                user = build_context(equipment=tr_c["_equipment"], tool_results=tr_c,
+                                     citations=[{"ref": r, "excerpt": ""} for r in refs_c], user_query=phr)
+                samples.append(_chat(DIAG_PERSONA, user, card_c))
+
         # T4 — RULEstimate (Reliability agent narrates the trend tool; numbers come verbatim)
         rul_phrasings = ["estimate RUL for {name}", "how long till {name} fails",
-                         "{name} remaining life pls", "kitna time hai before {name} trips"]
+                         "{name} remaining life pls", "kitna time hai before {name} trips",
+                         "what's the remaining useful life of {name}", "{name} how many days left"]
         for eq, (name, _code) in EQUIP.items():
             tr = {"_equipment": {"id": eq, "name": name},
                   "estimate_rul": {"rul_days": 21.0, "rul_band": [16.8, 29.4],
@@ -202,8 +295,10 @@ def main() -> int:
                                  citations=wait_cites, user_query=phr)
             samples.append(_chat(DIAG_PERSONA, user, wait_card))
 
-        # T10 — no_evidence refusal (empty retrieval)
-        for q in ("diagnose the flux capacitor", "what is the RUL of the teleporter"):
+        # T10 — no_evidence refusal (empty retrieval): refuse, never fabricate a citation
+        for q in ("diagnose the flux capacitor", "what is the RUL of the teleporter",
+                  "root cause of the warp core breach on caster 9",
+                  "how do I service the antigravity drive"):
             user = build_context(equipment=None, tool_results={}, citations=[], user_query=q)
             samples.append(_chat(DIAG_PERSONA, user, {"card_type": "no_evidence",
                 "message": "I couldn't find supporting manuals, SOPs, or records for that. I won't guess."}))
@@ -226,7 +321,7 @@ def main() -> int:
     eval_s, train_s = samples[:n_eval], samples[n_eval:]
     (HERE / "sft_train.jsonl").write_text("\n".join(json.dumps(s, ensure_ascii=False) for s in train_s), encoding="utf-8")
     (HERE / "sft_eval.jsonl").write_text("\n".join(json.dumps(s, ensure_ascii=False) for s in eval_s), encoding="utf-8")
-    print(f"wrote {len(train_s)} train + {len(eval_s)} eval pairs → finetune/dataset/")
+    print(f"wrote {len(train_s)} train + {len(eval_s)} eval pairs -> finetune/dataset/")
     return 0
 
 

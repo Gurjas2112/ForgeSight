@@ -19,7 +19,7 @@ HOW TO RUN (Colab, GPU runtime = T4):
      compliance AND number fidelity (the design's promotion rule).
 
 T4-tuned hyperparameters (override via CLI flags): r=16, max_seq_length=2048,
-per_device_train_batch_size=2, grad_accum=4, epochs=3, lr=2e-4, seed=42 (deterministic).
+per_device_train_batch_size=2, grad_accum=4, epochs=2, lr=1e-4, seed=42 (deterministic).
 """
 
 from __future__ import annotations
@@ -52,10 +52,10 @@ def _load_rows(data_path: Path) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="ForgeSight QLoRA fine-tune (Colab T4).")
     ap.add_argument("--data", type=Path, default=DEFAULT_DATA, help="sft_train.jsonl path")
-    ap.add_argument("--epochs", type=int, default=3)
+    ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch-size", type=int, default=2)
     ap.add_argument("--grad-accum", type=int, default=4)
-    ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--max-seq", type=int, default=MAX_SEQ)
     ap.add_argument("--no-export", action="store_true", help="skip GGUF/merged export (debug)")
     args = ap.parse_args()

@@ -2,7 +2,7 @@
 # After train_qlora.py exports the GGUF:
 #   ollama create qwen-forgesight -f finetune/Modelfile
 # Then set OLLAMA_MODEL=qwen-forgesight in .env (only if it beats base per the promotion rule).
-FROM ./export/qwen-forgesight/unsloth.Q4_K_M.gguf
+FROM ./export/qwen-forgesight.Q4_K_M.gguf
 
 PARAMETER temperature 0.1
 PARAMETER top_p 0.9
