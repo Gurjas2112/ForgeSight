@@ -14,7 +14,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from backend.agent.build import build_controller
 from backend.agent.demo_cards import golden_demo_cache
+from backend.auth.jwt import user_from_header
 from backend.agent.persistence import SupabasePersistence
 from backend.config import get_settings
 from backend.db.connection import get_pool, healthcheck
@@ -71,6 +72,20 @@ class FeedbackIn(BaseModel):
     session_id: str | None = None
 
 
+class SignupIn(BaseModel):
+    email: str
+    password: str
+    full_name: str | None = None
+    role: Literal["engineer", "admin"] = "engineer"
+
+
+# ---------------- auth ----------------
+
+def current_user(authorization: str | None = Header(default=None)) -> AuthUser:
+    """Resolve the caller from the Supabase Bearer token; demo engineer when absent/invalid."""
+    return user_from_header(authorization)
+
+
 # ---------------- helpers ----------------
 
 def _serialize(result: dict) -> dict:
@@ -99,13 +114,37 @@ def healthz() -> dict:
     return {"ok": True, "db": healthcheck(), "model": get_settings().ollama_model}
 
 
+@app.post("/auth/signup")
+def signup(body: SignupIn) -> dict:
+    """Create a pre-confirmed Supabase user (engineer|admin) + mirror into profiles."""
+    from backend.auth.supabase_admin import create_user
+    try:
+        u = create_user(body.email, body.password, body.role, body.full_name)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, f"signup failed: {e}")
+    try:
+        with STATE["pool"].connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO profiles (id, full_name, role) VALUES (%s, %s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, full_name = EXCLUDED.full_name",
+                (u["id"], body.full_name or body.email.split("@")[0], body.role))
+    except Exception:  # noqa: BLE001 — profile mirror is best-effort
+        pass
+    return {"ok": True, **u}
+
+
+@app.get("/auth/me")
+def me(user: AuthUser = Depends(current_user)) -> dict:
+    return {"id": user.id, "role": user.role}
+
+
 @app.post("/chat")
-def chat(body: ChatIn) -> dict:
+def chat(body: ChatIn, user: AuthUser = Depends(current_user)) -> dict:
     controller = STATE["controller"]
     session_id = body.session_id or str(uuid.uuid4())
     inputs = {
         "messages": [HumanMessage(content=body.message)],
-        "user": AuthUser(id="11111111-1111-1111-1111-111111111111", role=body.role),
+        "user": user,
         "session_id": session_id,
         "equipment_id": body.equipment_id,
         "consumed": Budget(),

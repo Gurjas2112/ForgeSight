@@ -24,7 +24,7 @@ export function EquipmentView({ id }: { id: string }) {
   return (
     <div className="max-w-7xl mx-auto px-5 py-5 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 h-[calc(100vh-3.5rem)]">
       <div className="overflow-y-auto pr-1 space-y-4">
-        <Link href="/" className="inline-flex items-center gap-1 text-sm text-[#8B98A5] hover:text-[#E6EDF3]"><ArrowLeft size={14} /> Plant Overview</Link>
+        <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-[#8B98A5] hover:text-[#E6EDF3]"><ArrowLeft size={14} /> Plant Overview</Link>
         {err && <div className="panel p-3 text-sm text-[#E5484D]">Backend unreachable ({err}).</div>}
         {d && (
           <>

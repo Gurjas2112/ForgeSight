@@ -1,82 +1,113 @@
-"use client";
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
-import { getAlerts, getEquipment } from "@/lib/api";
-import type { Alert, Equipment } from "@/lib/types";
-import { StatusBadge } from "@/components/ui";
+import {
+  ArrowRight, ShieldCheck, Brain, FileSearch, Gauge, Activity, Lock, Workflow,
+} from "lucide-react";
 
-function tileState(e: Equipment): { sev: string; label: string } {
-  if (e.id === "hsm-f3-stand") return { sev: "critical", label: "TRIPPED · HSM-F3-VFD-0247" };
-  if (e.is_anomalous && (e.rul_days ?? 99) < 7) return { sev: "high", label: `EARLY WARNING · RUL ≈ ${e.rul_days}d` };
-  if (e.is_anomalous) return { sev: "warning", label: "ABNORMAL TREND" };
-  return { sev: "ok", label: "HEALTHY" };
-}
+const FLOW = [
+  { n: 1, t: "Fault or alert comes in", d: "A trip code, an anomaly alert, or a natural-language question from the floor." },
+  { n: 2, t: "Governed agents investigate", d: "Diagnostic · Reliability · Supervisor · Planner · Analyst — each under an explicit charter, scoped tools, budgets." },
+  { n: 3, t: "Evidence-cited answer", d: "A structured card: ranked root causes, RUL, priority, spares — every claim cited to a manual, record, or trend." },
+  { n: 4, t: "Human commits, audited", d: "Agents propose; the engineer approves commitments; every allow/deny is timestamped in the audit log." },
+];
 
-export default function Overview() {
-  const [eq, setEq] = useState<Equipment[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [err, setErr] = useState<string>();
+const FEATURES = [
+  { icon: Brain, t: "On-prem SLM", d: "Fine-tuned Qwen2.5-3B under constrained decoding — no plant data leaves the network." },
+  { icon: FileSearch, t: "Cited, or it refuses", d: "A code-level guardrail makes a fabricated citation physically impossible." },
+  { icon: Gauge, t: "5 validated ML models", d: "Anomaly · RUL · failure · defect · Azure-PdM — benchmarked on NASA / UCI / Azure data." },
+  { icon: Workflow, t: "Deterministic scoring", d: "Priority & procurement from auditable rules, never an LLM guess." },
+  { icon: ShieldCheck, t: "Human-in-the-loop", d: "COMMIT actions pause for explicit engineer approval." },
+  { icon: Lock, t: "Role-based access", d: "Engineer and Admin roles, JWT-verified on every request." },
+];
 
-  useEffect(() => {
-    getEquipment().then(setEq).catch((e) => setErr(String(e)));
-    getAlerts().then(setAlerts).catch(() => {});
-  }, []);
+const MODELS = [
+  ["Anomaly", "recall 1.0 · 8.7 d lead"],
+  ["RUL (C-MAPSS)", "RMSE 16.4 cycles"],
+  ["Failure (AI4I)", "recall 0.91 · PR-AUC 0.80"],
+  ["Defect (Steel Plates)", "PR-AUC 0.80"],
+  ["Azure PdM 24h-ahead", "PR-AUC 0.90 · recall 0.92"],
+];
 
+export default function Landing() {
   return (
-    <div className="max-w-7xl mx-auto px-5 py-6">
-      <div className="flex items-end justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-semibold">Plant Overview</h1>
-          <p className="text-sm text-[#8B98A5]">6 critical assets · governed multi-agent decision support</p>
+    <div className="max-w-6xl mx-auto px-5">
+      {/* Hero */}
+      <section className="pt-16 pb-12 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#161B22] border border-[#232B35] text-xs text-[#8B98A5] mb-5">
+          <Activity size={13} className="text-[#FF6A2B]" /> Tata Steel AI Hackathon 2026
         </div>
-        <div className="flex gap-6 text-right">
-          <div><div className="mono text-2xl font-semibold text-[#3FB68B]">92%</div><div className="text-xs text-[#8B98A5]">availability</div></div>
-          <div><div className="mono text-2xl font-semibold text-[#E8B931]">{alerts.length}</div><div className="text-xs text-[#8B98A5]">open alerts</div></div>
-          <div><div className="mono text-2xl font-semibold text-[#FF6A2B]">₹18L</div><div className="text-xs text-[#8B98A5]">downtime at risk</div></div>
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
+          From fault code to fix plan in <span className="text-[#FF6A2B]">90 seconds</span>
+        </h1>
+        <p className="mt-4 text-lg text-[#9fb0c0] max-w-2xl mx-auto">
+          ForgeSight is a governed multi-agent maintenance wizard for steel plants — every answer
+          cited, every score deterministic, every agent under an explicit charter, running fully
+          on-premise on an open-source SLM.
+        </p>
+        <div className="mt-7 flex items-center justify-center gap-3">
+          <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#4A90D9] text-white font-medium hover:bg-[#3a7bc0]">
+            Get started <ArrowRight size={16} />
+          </Link>
+          <Link href="/login" className="px-5 py-2.5 rounded-lg border border-[#232B35] text-[#c3ced9] hover:border-[#4A90D9]">
+            Log in
+          </Link>
         </div>
-      </div>
+        <p className="mt-3 text-xs text-[#8B98A5]">
+          Demo logins — engineer@demo.forgesight / admin@demo.forgesight · password <span className="mono">forgesight-demo</span>
+        </p>
+      </section>
 
-      {err && <div className="panel p-3 mb-4 text-sm text-[#E5484D]">Backend unreachable ({err}). Start: <span className="mono">uvicorn backend.server:app --port 8000</span></div>}
+      {/* Flow */}
+      <section className="py-10">
+        <h2 className="text-center text-sm uppercase tracking-wider text-[#8B98A5] mb-6">How it works</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {FLOW.map((s) => (
+            <div key={s.n} className="panel p-4">
+              <div className="mono text-[#4A90D9] text-sm">0{s.n}</div>
+              <div className="font-medium mt-1">{s.t}</div>
+              <div className="text-sm text-[#8B98A5] mt-1">{s.d}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {eq.map((e) => {
-          const st = tileState(e);
-          const crit = st.sev === "critical";
-          return (
-            <Link key={e.id} href={`/equipment/${e.id}`}
-              className={`panel p-4 hover:border-[#4A90D9] transition-colors group ${crit ? "pulse-crit border-[#E5484D]" : ""}`}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-medium">{e.name}</div>
-                  <div className="text-xs text-[#8B98A5]">{e.zone} · criticality {e.criticality}</div>
-                </div>
-                <StatusBadge label={st.sev === "ok" ? "OK" : st.sev.toUpperCase()} sev={st.sev} />
-              </div>
-              <div className={`mt-3 text-sm mono ${crit ? "text-[#FF6A2B]" : st.sev === "ok" ? "text-[#3FB68B]" : "text-[#E8B931]"}`}>{st.label}</div>
-              <div className="mt-3 flex items-center justify-between text-xs text-[#8B98A5]">
-                <span>{e.anomaly_score != null ? `anomaly ${e.anomaly_score}` : "—"}{e.rul_days != null ? ` · RUL ${e.rul_days}d` : ""}</span>
-                <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+      {/* Features */}
+      <section className="py-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {FEATURES.map((f) => (
+            <div key={f.t} className="panel p-4">
+              <f.icon size={18} className="text-[#4A90D9]" />
+              <div className="font-medium mt-2">{f.t}</div>
+              <div className="text-sm text-[#8B98A5] mt-1">{f.d}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      {alerts.length > 0 && (
-        <div className="mt-6">
-          <h2 className="text-sm font-medium mb-2 text-[#8B98A5]">Live alert feed</h2>
-          <div className="space-y-1.5">
-            {alerts.map((a) => (
-              <Link key={a.id} href={`/equipment/${a.equipment_id}`} className="panel p-3 flex items-center gap-2 text-sm hover:border-[#4A90D9]">
-                <AlertTriangle size={15} className="text-[#FF6A2B]" />
-                <span className="flex-1">{a.title}</span>
-                <StatusBadge label={a.severity.toUpperCase()} sev={a.severity} />
-              </Link>
+      {/* Models */}
+      <section className="py-10">
+        <div className="panel p-5">
+          <div className="text-sm font-medium mb-3">About the models — benchmarks validate the method, the simulation validates the system</div>
+          <div className="flex flex-wrap gap-2">
+            {MODELS.map(([m, s]) => (
+              <span key={m} className="text-xs px-2.5 py-1 rounded bg-[#1C232C] border border-[#232B35]">
+                <span className="text-[#c3ced9]">{m}</span> <span className="text-[#8B98A5]">· {s}</span>
+              </span>
             ))}
           </div>
         </div>
-      )}
+      </section>
+
+      <section className="py-12 text-center">
+        <h2 className="text-2xl font-semibold">Ready to see it on a live plant?</h2>
+        <p className="text-[#8B98A5] mt-2">Sign in and open the control room.</p>
+        <Link href="/dashboard" className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#FF6A2B] text-black font-medium hover:opacity-90">
+          Open the dashboard <ArrowRight size={16} />
+        </Link>
+      </section>
+
+      <footer className="py-8 text-center text-xs text-[#8B98A5] border-t border-[#232B35]">
+        ForgeSight · governed multi-agent maintenance decision-support · on-prem capable
+      </footer>
     </div>
   );
 }

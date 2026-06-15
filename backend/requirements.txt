@@ -19,11 +19,13 @@ lightgbm>=4.5          # unpickle the served defect pipeline (LGBMClassifier)
 # Hosted-synthesis fallback (cloud deploy where Ollama isn't reachable):
 openai>=1.40
 reportlab>=4.2          # §5.4 maintenance PDF reports (alert report + shift summary)
+pyjwt>=2.9              # verify Supabase access tokens (ES256/RS256/HS256) for engineer/admin auth
+cryptography>=43.0      # ES256/RS256 JWKS verification (Supabase asymmetric signing keys)
+requests>=2.32         # Supabase GoTrue admin API (signup) — runtime, not just dev
 # Corpus seeding (dev-time):
 pymupdf>=1.24
 langchain-community>=0.3
 # Datasets (dev-time):
 ucimlrepo>=0.0.7
-requests>=2.32
 # Tests:
 pytest>=8.3
