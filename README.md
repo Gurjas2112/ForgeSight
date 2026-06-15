@@ -31,11 +31,11 @@ This repo delivers the full system. Per-requirement mapping is in
 | Component | Status |
 |---|---|
 | Datasets + corpus (`data/`) + Supabase schema/RLS (`backend/db/`) | ✅ |
-| 5 ML models (`ml/`: anomaly · failure · RUL · defect · **azure_pdm**) + bearing features; each with a `test.csv`→`submission.csv` | ✅ |
-| SLM fine-tune pipeline (`finetune/`) — base Qwen2.5-3B ships per promotion rule | ✅ pipeline (GPU run deferred) |
+| 5 ML models (`ml/`: anomaly · failure · RUL · defect · **azure_pdm**) + bearing features; **live held-out inference** via `GET /models/scorecard`; each with a `test.csv`→`submission.csv` | ✅ |
+| SLM fine-tune — **hybrid serving**: Colab T4 QLoRA runner (`finetune/colab_train.py`) → GGUF → local Ollama `qwen-forgesight`; public = Groq fallback (no cloud GPU) | ✅ (training is a GPU step) |
 | Governed graph — 5 chartered pipelines (Diagnostic · Reliability · Supervisor · Planner · **Analyst**) | ✅ |
-| FastAPI server: `/chat` · `/chat/approve` (HITL) · `/equipment` · `/alerts` · `/evidence` · **`/feedback`** · **`/reports/*`** | ✅ |
-| §1.7b governed text-to-SQL · §5.4 ReportLab PDF reports · FR-6 feedback loop | ✅ |
+| FastAPI server: `/chat` · `/chat/approve` (HITL) · `/equipment` · `/alerts` · `/evidence` · **`/feedback`** · **`/models/scorecard`** · **`/reports/*`** | ✅ |
+| §1.7b governed text-to-SQL · §5.4 ReportLab PDF reports · **FR-6 feedback loop that changes future answers** · **FR-7 background scheduler** (`ENABLE_SCHEDULER`) | ✅ |
 | Frontend (`frontend/`, Next.js 16 + React 19) | ✅ |
 | Deploy: backend → Railway (Docker validated) · frontend → Vercel | ✅ ready (`docs/DEPLOY.md`) |
 
@@ -69,11 +69,13 @@ uv run python ml/defect/train.py
 uv run python ml/azure_pdm/train.py                  # 5th model: Azure PdM 24h-ahead (PR-AUC 0.90)
 uv run python ml/bearing_features/extract_features.py # vibration features (committed sample if no CWRU)
 cp ml/shared/feature_config.json ml/shared/metrics.json backend/models/
+uv run python -m backend.tools.build_scorecard        # → backend/models/scorecard.json (held-out rows + metrics)
 # each ml/<model>/ now also holds a Kaggle-style test.csv → submission.csv (see ml/README.md)
 
-# 3. (optional) Fine-tune — runs on Colab/GPU; base Qwen ships otherwise
+# 3. (optional) Fine-tune — hybrid serving (GPU step on Colab T4)
 uv run python finetune/dataset/generate_sft.py && uv run python finetune/dataset/quality_gates.py
-#   then finetune/train_qlora.py on Colab → ollama create qwen-forgesight -f finetune/Modelfile
+#   Colab T4:  %run finetune/colab_train.py   → download GGUF → ollama create qwen-forgesight -f finetune/Modelfile
+#   then set SYNTHESIS_BACKEND=ollama + OLLAMA_MODEL=qwen-forgesight locally if it wins the eval
 
 # 4. Database — Supabase (set DATABASE_URL) OR a local pgvector container for an offline demo:
 bash scripts/local_pg.sh                              # prints DATABASE_URL for the container
@@ -87,7 +89,7 @@ cd frontend && npm install && npm run dev             # localhost:3000 (terminal
 
 # Verify (Gate 4): governed graph + tests
 uv run python scripts/diagnose_f3.py                  # DiagnosisCard citing BR-2024-0312
-uv run pytest backend/tests -q                        # 23 green
+uv run pytest backend/tests -q                        # 26 green
 ```
 
 Open **localhost:3000** → Plant Overview → click the F3 tile → ask the Copilot "diagnose the F3

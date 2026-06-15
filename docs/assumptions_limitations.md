@@ -25,11 +25,13 @@ real steel-plant sensor stream is publicly available.
 - **Anomaly precision.** IsolationForest favours recall (1.0, 8.7 d lead time) over precision
   (~0.23 on the labelled window) — appropriate for early warning, but it over-flags; production
   would add sustained-window confirmation (the severity rule already requires 3 windows).
-- **Fine-tune.** The SFT pipeline (parity serializer, 40 validated pairs, quality gates, Unsloth
-  QLoRA script, base-vs-FT eval) is complete, but QLoRA training runs on Colab/GPU. The runtime
-  ships **base Qwen2.5-3B** under constrained decoding (citation compliance is structural, not
-  model-dependent) per the design's promotion rule; the fine-tune promotes only if it beats base on
-  citation + number fidelity.
+- **Fine-tune (hybrid serving).** The SFT pipeline (parity serializer, expanded card-target pairs
+  incl. RUL/priority/spares/wait-assessment, quality gates, Unsloth QLoRA) ships a one-file Colab T4
+  runner `finetune/colab_train.py` → GGUF → `ollama create qwen-forgesight`. **Locally** the
+  fine-tuned Qwen serves synthesis (`SYNTHESIS_BACKEND=ollama`, `OLLAMA_MODEL=qwen-forgesight`);
+  **publicly** Railway has no GPU so it uses the **Groq** fallback. `/healthz` reports the active
+  backend+model. Promotion is gated by `finetune/03_evaluate_vs_base.py` (citation + number
+  fidelity); base Qwen is the sanctioned fallback (citation compliance is structural either way).
 - **CopilotKit.** The conversational sidebar implements the CoAgents pattern (delegation stream,
   cards, HITL approval, Evidence Trail) with a reliable direct-to-API transport rather than the
   CopilotKit runtime, to stay compatible with Next.js 16 / React 19 under the deadline.
@@ -38,11 +40,21 @@ real steel-plant sensor stream is publicly available.
   Ollama, so synthesis uses the **Groq hosted fallback** (`SYNTHESIS_BACKEND=hosted`,
   `LLM_PROVIDER=groq`, `llama-3.3-70b-versatile` via OpenAI-compatible API) and RAG runs
   **full-text-primary** (`RETRIEVAL_MODE=fulltext`) — citations stay real (chunks come from the DB).
-  Scripted demo scenarios also hit the **golden demo cache** when synthesis is slow or unavailable;
-  **locally synthesis runs live on Ollama Qwen2.5-3B**.
-- **Azure PdM model.** `ml/azure_pdm/` is a real 24h-ahead failure classifier (XGBoost, time-based
-  split, PR-AUC 0.90/recall 0.92) — it validates a second, multi-source PdM method; it is not on the
-  per-equipment serving path (validation-only, like the C-MAPSS RUL and AI4I failure models).
+  The demo is **de-canned**: `DEMO_MODE` defaults false, so `/chat` runs the real governed pipeline
+  and the golden card only appears as an **error/timeout fallback**; locally synthesis runs live on
+  Ollama Qwen2.5-3B (the fine-tuned `qwen-forgesight` when promoted).
+- **Real ML inference + scorecard.** `GET /models/scorecard` (and the dashboard panel) run **live
+  held-out inference** per model: anomaly (live on sensors), defect (live LightGBM on a real Steel
+  Plates row — the former zero-vector stub is gone), and failure/Azure/RUL (live XGBoost on their
+  committed held-out rows). failure/Azure/RUL are **benchmark-validated second opinions**, not
+  per-equipment sensor models — we do not fabricate a sensor→feature mapping that doesn't hold.
+- **Feedback loop (FR-6).** `/feedback` is feedback-conditioned retrieval + few-shot exemplar
+  injection (`backend/tools/feedback_store.py`), NOT weight retraining: a `down` verdict demotes the
+  cited record on re-ask, a `fixed` verdict injects the confirmed cause into synthesis. In-process
+  for the warm demo session + persisted to the DB `feedback` table; proven by `test_feedback_loop.py`.
+- **Scheduler (FR-7).** The health re-scan runs inside the FastAPI `lifespan` behind
+  `ENABLE_SCHEDULER` (asyncio task, `SCHEDULER_INTERVAL_SECONDS`, default 120 s) so `/alerts`
+  reflects live re-scans — kept cheap for the Railway free tier.
 - **Text-to-SQL (§1.7b).** `query_records` is template-first (deterministic, demo-safe) with an
   optional SLM pass validated by the same SELECT-only + whitelist + EXPLAIN guards, so an unreliable
   3B model can never emit an unsafe or hallucinated query; it reaches only four curated read-only views.
