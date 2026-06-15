@@ -133,6 +133,7 @@ def _doc_type_to_kind(doc_type: str, section_ref: str) -> str:
 
 def retrieve_rag(conn, query: str, equipment_id: str | None = None,
                  doc_types: list[str] | None = None, k: int = 8) -> list[RetrievedChunk]:
+    equipment_id = equipment_id or None     # "" (unknown equipment) → no filter, not an exact-match
     vec_literal = _embed_query(query)
     ts_query, like = _fts_terms(query)
     with conn.cursor() as cur:
