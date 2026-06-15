@@ -61,6 +61,7 @@ def main() -> None:
     args = ap.parse_args()
 
     # Heavy imports live inside main so importing this module never requires a GPU stack.
+    import inspect
     import torch  # noqa: F401
     from datasets import Dataset
     from trl import SFTConfig, SFTTrainer
@@ -88,17 +89,33 @@ def main() -> None:
     print(f"      {len(ds)} training pairs")
 
     print(f"[4/5] training ({args.epochs} epochs, bsz={args.batch_size}x{args.grad_accum}) …")
-    trainer = SFTTrainer(
-        model=model, tokenizer=tokenizer, train_dataset=ds, dataset_text_field="text",
-        max_seq_length=args.max_seq, dataset_num_proc=2, packing=False,
-        args=SFTConfig(
-            per_device_train_batch_size=args.batch_size,
-            gradient_accumulation_steps=args.grad_accum,
-            warmup_steps=5, num_train_epochs=args.epochs, learning_rate=args.lr,
-            fp16=not is_bfloat16_supported(), bf16=is_bfloat16_supported(),
-            logging_steps=1, optim="adamw_8bit", weight_decay=0.01,
-            lr_scheduler_type="linear", seed=SEED, output_dir=str(HERE / "outputs"),
-            report_to="none"))
+    # TRL's API moves between releases: newer versions take `processing_class` instead of
+    # `tokenizer`, fold dataset/length kwargs into SFTConfig, and renamed `max_seq_length`
+    # to `max_length`. Place each kwarg wherever the installed signatures accept it so this
+    # runs on whatever TRL the Colab install pulled.
+    cfg_params = set(inspect.signature(SFTConfig.__init__).parameters)
+    trainer_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    seq_key = "max_seq_length" if "max_seq_length" in cfg_params else "max_length"
+    optional = {seq_key: args.max_seq, "dataset_text_field": "text",
+                "dataset_num_proc": 2, "packing": False}
+
+    cfg_kwargs = dict(
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
+        warmup_steps=5, num_train_epochs=args.epochs, learning_rate=args.lr,
+        fp16=not is_bfloat16_supported(), bf16=is_bfloat16_supported(),
+        logging_steps=1, optim="adamw_8bit", weight_decay=0.01,
+        lr_scheduler_type="linear", seed=SEED, output_dir=str(HERE / "outputs"),
+        report_to="none")
+    cfg_kwargs.update({k: v for k, v in optional.items() if k in cfg_params})
+
+    trainer_kwargs = dict(model=model, train_dataset=ds, args=SFTConfig(**cfg_kwargs))
+    trainer_kwargs["processing_class" if "processing_class" in trainer_params
+                   else "tokenizer"] = tokenizer
+    # Older TRL expects these on the trainer itself rather than on SFTConfig.
+    trainer_kwargs.update({k: v for k, v in optional.items()
+                           if k in trainer_params and k not in cfg_params})
+    trainer = SFTTrainer(**trainer_kwargs)
     stats = trainer.train()
     print(f"      done — train_runtime={getattr(stats, 'metrics', {}).get('train_runtime', '?')}s")
 
