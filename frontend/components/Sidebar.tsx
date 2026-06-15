@@ -15,11 +15,10 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<string>();
-  const [streaming, setStreaming] = useState<string[]>([]);
   const [drawer, setDrawer] = useState<{ ref: string; content: string; source?: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, streaming]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   async function openEvidence(ref: string) {
     setDrawer({ ref, content: "Loading…" });
@@ -33,16 +32,11 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
     if (!text.trim() || busy) return;
     setMsgs((m) => [...m, { role: "user", text }]);
     setInput(""); setBusy(true);
-    // simulated delegation stream while the graph runs
-    const stream = ["Orchestrator → routing intent…", "Diagnostic Agent: searching manuals & SOPs…", "matching past breakdown records…"];
-    for (let i = 0; i < stream.length; i++) setTimeout(() => setStreaming((s) => [...s, stream[i]]), i * 450);
     try {
       const r = await postChat({ message: text, equipment_id: equipmentId, session_id: session });
       setSession(r.session_id);
-      setStreaming([]);
       if (r.card) setMsgs((m) => [...m, { role: "assistant", card: r.card!, delegations: r.delegations, pending: r.awaiting_approval ? r.pending_action : null }]);
     } catch (e) {
-      setStreaming([]);
       setMsgs((m) => [...m, { role: "assistant", card: { card_type: "degraded", message: `Backend unreachable: ${e}` }, delegations: [] }]);
     } finally { setBusy(false); }
   }
@@ -99,9 +93,10 @@ export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeti
             </div>
           )
         )}
-        {streaming.length > 0 && (
-          <div className="text-xs text-[#8B98A5] space-y-0.5 pl-1 slidein">
-            {streaming.map((s, i) => <div key={i} className="flex items-center gap-1"><ChevronRight size={11} className="text-[#FF6A2B]" />{s}</div>)}
+        {busy && (
+          <div className="flex items-center gap-2 text-xs text-[#8B98A5] pl-1 slidein">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4A90D9] animate-pulse" />
+            Running governed pipeline…
           </div>
         )}
         <div ref={endRef} />
