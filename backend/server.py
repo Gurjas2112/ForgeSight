@@ -33,13 +33,38 @@ from backend.schemas.agent_models import AuthUser, Budget
 STATE: dict[str, Any] = {}
 
 
+async def _scheduler_loop(interval: int):
+    """FR-7 — background health re-scan: every `interval`s run scan_once() off the event loop
+    so /alerts reflects live re-scans, not a single seed. Guarded by ENABLE_SCHEDULER."""
+    import asyncio
+
+    from backend.scheduler.health_scan import scan_once
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await asyncio.to_thread(scan_once)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:  # noqa: BLE001 — a bad scan must never kill the loop
+            print(f"[scheduler] scan failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
     pool = get_pool()
     STATE["pool"] = pool
     STATE["controller"] = build_controller(
         pool=pool, persistence=SupabasePersistence(pool), demo_cache=golden_demo_cache())
+    s = get_settings()
+    task = None
+    if s.enable_scheduler:
+        task = asyncio.create_task(_scheduler_loop(s.scheduler_interval_seconds))
+        print(f"[scheduler] enabled · every {s.scheduler_interval_seconds}s")
     yield
+    if task is not None:
+        task.cancel()
     pool.close()
 
 
@@ -70,6 +95,9 @@ class FeedbackIn(BaseModel):
     fault_code: str | None = None
     note: str | None = None
     session_id: str | None = None
+    citation_ref: str | None = None     # the cited record a 'down' verdict demotes
+    root_cause: str | None = None       # a 'fixed' verdict's confirmed root cause (→ exemplar)
+    fix: str | None = None              # a 'fixed' verdict's confirmed fix (→ exemplar)
 
 
 class SignupIn(BaseModel):
@@ -111,7 +139,13 @@ def _serialize(result: dict) -> dict:
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True, "db": healthcheck(), "model": get_settings().ollama_model}
+    """Report liveness + which SLM/LLM is actually serving synthesis (proves the active backend:
+    local fine-tuned Qwen via Ollama, or the Groq hosted fallback on Railway)."""
+    s = get_settings()
+    backend = s.synthesis_backend
+    active_model = s.ollama_model if backend == "ollama" else f"{s.llm_provider}:{s.llm_model}"
+    return {"ok": True, "db": healthcheck(), "synthesis_backend": backend,
+            "model": active_model, "scheduler": s.enable_scheduler}
 
 
 @app.post("/auth/signup")
@@ -151,7 +185,7 @@ def chat(body: ChatIn, user: AuthUser = Depends(current_user)) -> dict:
         "repair_attempted": False,
     }
     config = {"configurable": {"thread_id": session_id}, "recursion_limit": 25}
-    result = controller.graph.invoke(inputs, config)
+    result = controller.invoke(inputs, config)
     out = _serialize(result)
     out["session_id"] = session_id
     return out
@@ -226,6 +260,11 @@ def feedback(body: FeedbackIn) -> dict:
     """FR-6 — feedback-driven improvement. Capture up/down/fixed; a 'fixed' verdict flips the
     matching breakdown record to engineer-verified (earns the green chip) and logs it. Agent
     suggestions and confirmed facts are never conflated — only human-verified records turn green."""
+    # FR-6 — condition future retrieval/synthesis on this verdict (demonstrably changes answers)
+    from backend.tools import feedback_store
+    feedback_store.record(body.verdict, equipment_id=body.equipment_id, fault_code=body.fault_code,
+                          citation_ref=body.citation_ref, root_cause=body.root_cause, fix=body.fix)
+
     verified_ref = None
     with STATE["pool"].connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -247,6 +286,18 @@ def feedback(body: FeedbackIn) -> dict:
                 (body.equipment_id, Json({"note": body.note, "fault_code": body.fault_code,
                                           "verified_record": verified_ref})))
     return {"ok": True, "feedback_id": str(fid), "verified_record": verified_ref}
+
+
+@app.get("/models/scorecard")
+def models_scorecard() -> dict:
+    """About-the-models panel: each model's training metrics + a LIVE held-out inference
+    (defect via LightGBM; failure/azure/RUL via XGBoost). Every advertised number is a real,
+    reproducible model output, not a static claim."""
+    from backend.tools.ml_tools import model_scorecard
+    try:
+        return model_scorecard()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(503, f"scorecard unavailable (models not published?): {e}")
 
 
 @app.get("/alerts")

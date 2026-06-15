@@ -108,12 +108,35 @@ def retrieve_rag(conn, query: str, equipment_id: str | None = None,
     return sorted(chunks, key=lambda c: c.id)            # stable for prefix/KV cache
 
 
+def apply_feedback_ranking(hits: list[RetrievedChunk], equipment_id: str | None,
+                           fault_code: str | None) -> list[RetrievedChunk]:
+    """FR-6 re-ranking: verified records float up; engineer-down-voted records sink. A pure
+    function of the hit list + the feedback store so it is unit-testable without a DB."""
+    from backend.tools import feedback_store as fb
+
+    demoted = fb.demoted_refs(equipment_id, fault_code)
+    group_penalty = fb.penalty_for(equipment_id, fault_code)
+    # A group down-vote with no explicit ref demotes the current top record (the one shown).
+    if group_penalty and not demoted and hits:
+        top = sorted(hits, key=lambda c: (0 if "[VERIFIED]" in c.section_ref else 1, -c.score))[0]
+        demoted = {top.section_ref.replace(" [VERIFIED]", "")}
+
+    def _rank(c: RetrievedChunk):
+        ref = c.section_ref.replace(" [VERIFIED]", "")
+        penalised = 1 if ref in demoted else 0           # primary: down-voted sinks to the bottom
+        verified = 0 if "[VERIFIED]" in c.section_ref else 1
+        return (penalised, verified, -c.score)
+
+    return sorted(hits, key=_rank)
+
+
 def match_history(conn, equipment_id: str, fault_code: str | None = None,
                   symptoms: str | None = None, k: int = 5) -> list[RetrievedChunk]:
-    """Similar past breakdowns. Verified records float to the top (green chip)."""
+    """Similar past breakdowns. Verified records float to the top (green chip); feedback
+    conditioning (down-votes) demotes records on subsequent asks."""
     q = " ".join(x for x in (fault_code, symptoms) if x) or (fault_code or symptoms or "")
     hits = retrieve_rag(conn, q, equipment_id, doc_types=["report"], k=k * 2)
-    hits.sort(key=lambda c: (0 if "[VERIFIED]" in c.section_ref else 1, -c.score))
+    hits = apply_feedback_ranking(hits, equipment_id, fault_code)
     return hits[:k]
 
 

@@ -16,6 +16,7 @@ numpy>=2.0
 pandas>=2.2
 scikit-learn>=1.5
 lightgbm>=4.5          # unpickle the served defect pipeline (LGBMClassifier)
+xgboost>=2.1           # benchmark second-opinion models (failure/azure/RUL held-out inference)
 # Hosted-synthesis fallback (cloud deploy where Ollama isn't reachable):
 openai>=1.40
 reportlab>=4.2          # §5.4 maintenance PDF reports (alert report + shift summary)

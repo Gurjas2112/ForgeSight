@@ -106,7 +106,8 @@ AGENT_CHARTERS: dict[str, AgentCharter] = {
             "(contributing sensors, thresholds, confidence bands). You never estimate "
             "numbers yourself; you narrate tool outputs."
         ),
-        allowed_tools=frozenset({"check_equipment_health", "estimate_rul", "analyze_defect"}),
+        allowed_tools=frozenset({"check_equipment_health", "estimate_rul", "analyze_defect",
+                                 "predict_failure", "predict_pdm_24h", "rul_benchmark"}),
         action_classes=frozenset({ActionClass.READ}),
         data_scopes=frozenset({"sensor_readings", "equipment_health", "equipment"}),
     ),
@@ -481,10 +482,32 @@ class AgentController:
             return self.graph.invoke(inputs, config)
         except GraphRecursionError:
             state = self.graph.get_state(config).values
-            return {**state, "draft_card": self.guards.degraded_card(state)}
+            return self._error_fallback(inputs) or {
+                **state, "draft_card": self.guards.degraded_card(state)}
         except AuthorityError as e:
             return {"draft_card": {"card_type": "denied",
                                    "message": f"Action not permitted: {e}"}}
+        except Exception:  # noqa: BLE001 — live failure mid-turn → golden fallback, never a 500
+            fb = self._error_fallback(inputs)
+            if fb is not None:
+                return fb
+            raise
+
+    def _error_fallback(self, inputs: dict) -> dict | None:
+        """Error/timeout fallback ONLY: if the live governed turn fails, serve the pre-baked
+        golden card for a scripted query so a demo never dies on a spinner. The happy path is
+        always the real pipeline (DEMO_MODE defaults false); this is the safety net, not the norm."""
+        demo = getattr(self.caches, "demo", None) or {}
+        if not demo:
+            return None
+        text = _last_user_text(inputs if "messages" in inputs else {"messages": inputs.get("messages", [])})
+        key = f"{inputs.get('equipment_id') or ''}::{' '.join((text or '').lower().split())}"
+        card = demo.get(key)
+        if card is None:
+            return None
+        return {"draft_card": {**card, "served_from_cache": True},
+                "citations": [], "delegations": [],
+                "intent": "diagnosis", "query_class": "knowledge"}
 
 
 # ----------------------------------------------------------------------------------

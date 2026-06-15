@@ -120,6 +120,11 @@ class OllamaSynthesizer:
             user_query=_query_from_history(history) or "(see context)",
             history=_summarize_history(history),
         )
+        # FR-6 — inject engineer-confirmed fixes for this (equipment, fault) as few-shot exemplars
+        # so a 'fixed' verdict measurably steers the next diagnosis toward the verified cause.
+        exemplars = _exemplar_block(tool_results)
+        if exemplars:
+            context += exemplars
         allowed = [c["ref"] for c in cite_excerpts]
         instruction = (
             f"\n\nProduce a single {card_model.__name__} JSON object. "
@@ -254,6 +259,32 @@ def _slim_tool_results(tool_results: dict[str, Any]) -> dict[str, Any]:
 
 def _equipment_from_results(tool_results: dict[str, Any]) -> dict | None:
     return tool_results.get("_equipment")
+
+
+def _fault_from_results(tool_results: dict[str, Any]) -> str | None:
+    for item in tool_results.get("match_history", []) or []:
+        if isinstance(item, dict) and item.get("fault_code"):
+            return item["fault_code"]
+    return None
+
+
+def _exemplar_block(tool_results: dict[str, Any]) -> str:
+    """Render engineer-confirmed (VERIFIED) fixes for this equipment+fault as a few-shot block.
+    Returns '' when there is no feedback yet (so the prompt is unchanged on a cold system)."""
+    from backend.tools import feedback_store as fb
+
+    eq = (_equipment_from_results(tool_results) or {}).get("id")
+    fault = _fault_from_results(tool_results)
+    exemplars = fb.exemplars_for(eq, fault)
+    if not exemplars:
+        return ""
+    lines = ["\n\nENGINEER-VERIFIED FIXES (confirmed on this equipment+fault — prefer these "
+             "as the leading root cause):"]
+    for e in exemplars[-3:]:
+        rc = (e.get("root_cause") or "").strip()
+        fx = (e.get("fix") or "").strip()
+        lines.append(f"- root_cause: {rc}" + (f" · fix: {fx}" if fx else ""))
+    return "\n".join(lines)
 
 
 def _query_from_history(history: Any) -> str | None:

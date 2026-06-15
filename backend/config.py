@@ -61,7 +61,13 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
 
     # --- flags ---
-    demo_mode: bool = True
+    # DEMO_MODE: when true, scripted golden queries short-circuit the governed graph. Default
+    # FALSE so /chat runs the REAL pipeline (the golden card is only an error/timeout fallback).
+    demo_mode: bool = False
+
+    # --- alert scheduler (FR-7) — background re-scan of equipment health into alerts ---
+    enable_scheduler: bool = False
+    scheduler_interval_seconds: int = 120
 
 
 @lru_cache
