@@ -10,15 +10,25 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type Turn = { role: "user" } | { role: "assistant"; card: Card; delegations: Delegation[]; pending?: Record<string, unknown> | null };
 type Msg = ({ role: "user"; text: string }) | (Turn & { role: "assistant"; card: Card; delegations: Delegation[]; pending?: Record<string, unknown> | null });
 
-export function Sidebar({ equipmentId, greeting }: { equipmentId: string; greeting?: string }) {
+export function Sidebar({ equipmentId, greeting, initialPrompt }: { equipmentId: string; greeting?: string; initialPrompt?: string }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState<string>();
   const [drawer, setDrawer] = useState<{ ref: string; content: string; source?: string } | null>(null);
+  const [promptSent, setPromptSent] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
+
+  useEffect(() => { setPromptSent(false); }, [initialPrompt]);
+
+  useEffect(() => {
+    if (initialPrompt && !promptSent && !busy) {
+      setPromptSent(true);
+      ask(initialPrompt);
+    }
+  }, [initialPrompt, promptSent, busy]);
 
   async function openEvidence(ref: string) {
     setDrawer({ ref, content: "Loading…" });

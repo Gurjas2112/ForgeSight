@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Html, Grid, ContactShadows } from "@react-three/drei";
 import type { Mesh } from "three";
-import { getAlerts, getEquipment, reportUrl } from "@/lib/api";
-import type { Alert, Equipment } from "@/lib/types";
+import { getAlerts, getEquipment, getWorkOrders, reportUrl } from "@/lib/api";
+import type { Alert, Equipment, WorkOrder } from "@/lib/types";
 
 type Sev = "critical" | "high" | "warning" | "ok";
 const SEV_COLOR: Record<Sev, string> = {
@@ -168,13 +168,14 @@ function Scene({ placed, zoneMarkers, extent, selectedId, onSelect }: {
 export default function PlantTwin3D() {
   const [eq, setEq] = useState<Equipment[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState<string>();
 
   useEffect(() => {
     getEquipment().then(setEq).catch((e) => setErr(String(e)));
     getAlerts().then(setAlerts).catch(() => {});
-    // deep-link: /dashboard/twin?asset=<id> opens the inspector on that asset
+    getWorkOrders().then(setWorkOrders).catch(() => {});
     const a = new URLSearchParams(window.location.search).get("asset");
     if (a) setSel(a);
   }, []);
@@ -185,11 +186,19 @@ export default function PlantTwin3D() {
     return m;
   }, [alerts]);
 
+  const woByEq = useMemo(() => {
+    const m: Record<string, WorkOrder[]> = {};
+    for (const w of workOrders) if (w.status !== "completed" && w.status !== "cancelled") {
+      (m[w.equipment_id] ||= []).push(w);
+    }
+    return m;
+  }, [workOrders]);
+
   const { placed, zoneMarkers, extent } = useMemo(
     () => layout(eq, alertsByEq), [eq, alertsByEq]);
 
   const selected = placed.find((p) => p.eq.id === sel) || null;
-  const workOrders = selected ? (alertsByEq[selected.eq.id] || []) : [];
+  const selectedWOs = selected ? (woByEq[selected.eq.id] || []) : [];
 
   return (
     <div className="relative h-[calc(100vh-3.5rem)] w-full">
@@ -242,20 +251,19 @@ export default function PlantTwin3D() {
           </div>
 
           <div className="mt-4">
-            <div className="text-sm font-medium mb-2">Open work orders <span className="text-[#8B98A5]">({workOrders.length})</span></div>
-            {workOrders.length === 0 && <div className="text-xs text-[#8B98A5] panel p-3">No open work orders.</div>}
+            <div className="text-sm font-medium mb-2">Open work orders <span className="text-[#8B98A5]">({selectedWOs.length})</span></div>
+            {selectedWOs.length === 0 && <div className="text-xs text-[#8B98A5] panel p-3">No open work orders.</div>}
             <div className="space-y-1.5">
-              {workOrders.slice(0, 8).map((w) => (
-                <div key={w.id} className="panel p-2.5 text-xs">
+              {selectedWOs.slice(0, 8).map((w) => (
+                <Link key={w.id} href={`/dashboard/work-orders/${w.id}`} className="panel p-2.5 text-xs block hover:border-[#4A90D9]">
                   <div className="flex items-center justify-between">
                     <span className="mono text-[#9fb0c0]">WO-{w.id.slice(0, 8)}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                      style={{ color: SEV_COLOR[(w.severity as Sev) in SEV_COLOR ? (w.severity as Sev) : "warning"] }}>
-                      {w.severity.toUpperCase()}
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium text-[#E8B931]">
+                      {w.status.replace("_", " ").toUpperCase()}
                     </span>
                   </div>
                   <div className="text-[#c3ced9] mt-1">{w.title}</div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>

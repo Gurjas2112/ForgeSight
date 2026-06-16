@@ -131,3 +131,32 @@ def draft_shift_summary(*, alerts: list[dict], equipment: list[dict] | None = No
     story += [Spacer(1, 10), _footer(ss)]
     doc.build(story)
     return buf.getvalue()
+
+
+def generate_work_order_report(*, wo: dict) -> bytes:
+    """Work order PDF export."""
+    ss = _styles()
+    buf, doc = _doc(f"Work Order — {wo.get('id', '')[:8]}")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    story = [
+        Paragraph("Work Order", ss["H"]),
+        Paragraph(f"{wo.get('title', '?')} · {wo.get('equipment_id', '?')} · status {wo.get('status', '?')} · {now}", ss["Sub"]),
+        Paragraph("Details", ss["Sec"]),
+        _kv_table([
+            ("Equipment", f"{wo.get('equipment_name', '?')} ({wo.get('equipment_id', '?')})"),
+            ("Priority", str(wo.get("priority", "—"))),
+            ("Status", str(wo.get("status", "—"))),
+            ("Description", wo.get("description") or "—"),
+        ]),
+        Spacer(1, 6),
+    ]
+    steps = wo.get("steps") or []
+    if steps:
+        story.append(Paragraph("Execution steps", ss["Sec"]))
+        for i, s in enumerate(steps, 1):
+            done = "✓" if s.get("done") else "○"
+            safety = " [SAFETY]" if s.get("safety") else ""
+            story.append(Paragraph(f"{done} {i}. {s.get('text', '')}{safety}", ss["Normal"]))
+    story += [Spacer(1, 10), _footer(ss)]
+    doc.build(story)
+    return buf.getvalue()

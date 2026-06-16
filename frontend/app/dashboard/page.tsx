@@ -35,7 +35,7 @@ function Overview() {
     : undefined;
 
   return (
-    <div className="max-w-7xl mx-auto px-5 py-6">
+    <div>
       <div className="flex items-end justify-between mb-5">
         <div>
           <div className="flex items-center gap-2">

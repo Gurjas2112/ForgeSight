@@ -19,6 +19,7 @@ DO $$ BEGIN CREATE TYPE msg_role_t    AS ENUM ('user','assistant','agent_event')
 DO $$ BEGIN CREATE TYPE verdict_t     AS ENUM ('up','down','fixed');                      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE author_t      AS ENUM ('system','human');                         EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE TYPE pending_t     AS ENUM ('pending','approved','rejected');          EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE wo_status_t   AS ENUM ('draft','open','in_progress','completed','cancelled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================================
 -- 2. Core domain tables
@@ -88,8 +89,10 @@ CREATE TABLE IF NOT EXISTS spares (
     description    text,
     stock_qty      int,
     lead_time_days int,
-    supplier       text
+    supplier       text,
+    unit_cost_inr  int DEFAULT 0
 );
+ALTER TABLE spares ADD COLUMN IF NOT EXISTS unit_cost_inr int DEFAULT 0;
 
 -- ----------------------------------------------------------------------------
 -- doc_chunks — RAG corpus (seeded by data/corpus/seed_corpus.py → corpus_ingest.sql)
@@ -210,6 +213,24 @@ CREATE TABLE IF NOT EXISTS rejected_readings (
     ts     timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS work_orders (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    equipment_id text REFERENCES equipment(id) ON DELETE CASCADE,
+    alert_id     uuid REFERENCES alerts(id) ON DELETE SET NULL,
+    session_id   uuid REFERENCES chat_sessions(id) ON DELETE SET NULL,
+    title        text NOT NULL,
+    description  text,
+    status       wo_status_t NOT NULL DEFAULT 'open',
+    priority     int CHECK (priority BETWEEN 1 AND 100),
+    assignee     uuid REFERENCES auth.users(id),
+    steps        jsonb DEFAULT '[]'::jsonb,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    completed_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_work_orders_eq ON work_orders(equipment_id, status);
+CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status, created_at DESC);
+
 -- ============================================================================
 -- 5. Analytics — read-only curated views (text-to-SQL reaches ONLY these; Phase 7)
 -- ============================================================================
@@ -221,7 +242,7 @@ CREATE OR REPLACE VIEW v_breakdown_stats AS
 
 CREATE OR REPLACE VIEW v_spares_status AS
     SELECT s.part_no, s.equipment_id, e.name AS equipment_name, s.description,
-           s.stock_qty, s.lead_time_days, s.supplier
+           s.stock_qty, s.lead_time_days, s.supplier, s.unit_cost_inr
     FROM spares s LEFT JOIN equipment e ON e.id = s.equipment_id;
 
 CREATE OR REPLACE VIEW v_alert_feed AS

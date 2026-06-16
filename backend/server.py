@@ -107,6 +107,29 @@ class SignupIn(BaseModel):
     role: Literal["engineer", "admin"] = "engineer"
 
 
+class WorkOrderIn(BaseModel):
+    equipment_id: str
+    title: str
+    description: str | None = None
+    alert_id: str | None = None
+    session_id: str | None = None
+    priority: int = 50
+    steps: list[dict] | None = None
+
+
+class WorkOrderPatch(BaseModel):
+    status: Literal["draft", "open", "in_progress", "completed", "cancelled"] | None = None
+    steps: list[dict] | None = None
+    priority: int | None = None
+
+
+class HandoverIn(BaseModel):
+    equipment_id: str
+    notes: str
+    open_work_orders: list[str] | None = None
+    risk_context: dict | None = None
+
+
 # ---------------- auth ----------------
 
 def current_user(authorization: str | None = Header(default=None)) -> AuthUser:
@@ -344,6 +367,207 @@ def plant_summary() -> dict:
                     "GROUP BY equipment_id")
         al = [{"equipment_id": r[0], "severity": r[1]} for r in cur.fetchall()]
     return compute_plant_summary(eq, dt, al)
+
+
+# ---------------- dashboard modules ----------------
+
+@app.get("/search")
+def search(q: str = "", types: str = "", equipment_id: str | None = None, limit: int = 30,
+           user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.search import unified_search
+    type_list = [t.strip() for t in types.split(",") if t.strip()] or None
+    with STATE["pool"].connection() as conn:
+        items = unified_search(conn, q=q, types=type_list, equipment_id=equipment_id, limit=limit)
+    return {"items": items, "count": len(items)}
+
+
+@app.get("/work-orders")
+def work_orders_list(equipment_id: str | None = None, status: str | None = None,
+                     user: AuthUser = Depends(current_user)) -> list[dict]:
+    from backend.tools.work_orders import list_work_orders
+    with STATE["pool"].connection() as conn:
+        return list_work_orders(conn, equipment_id=equipment_id, status=status)
+
+
+@app.get("/work-orders/{wo_id}")
+def work_order_get(wo_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.work_orders import get_work_order
+    with STATE["pool"].connection() as conn:
+        wo = get_work_order(conn, wo_id)
+    if not wo:
+        raise HTTPException(404, "work order not found")
+    return wo
+
+
+@app.post("/work-orders")
+def work_order_create(body: WorkOrderIn, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.work_orders import create_work_order
+    with STATE["pool"].connection() as conn:
+        return create_work_order(conn, equipment_id=body.equipment_id, title=body.title,
+                                 description=body.description, alert_id=body.alert_id,
+                                 session_id=body.session_id, priority=body.priority, steps=body.steps)
+
+
+@app.patch("/work-orders/{wo_id}")
+def work_order_patch(wo_id: str, body: WorkOrderPatch, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.work_orders import update_work_order
+    with STATE["pool"].connection() as conn:
+        wo = update_work_order(conn, wo_id, status=body.status, steps=body.steps, priority=body.priority)
+    if not wo:
+        raise HTTPException(404, "work order not found")
+    return wo
+
+
+@app.get("/work-orders/{wo_id}/export")
+def work_order_export(wo_id: str, format: str = "json", user: AuthUser = Depends(current_user)) -> Response:
+    from backend.tools.work_orders import export_work_order
+    try:
+        with STATE["pool"].connection() as conn:
+            body, mime, fname = export_work_order(conn, wo_id, format)
+    except ValueError:
+        raise HTTPException(404, "work order not found")
+    return Response(body, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@app.get("/incidents")
+def incidents_list(equipment_id: str | None = None, user: AuthUser = Depends(current_user)) -> list[dict]:
+    from backend.tools.incidents import list_incidents
+    with STATE["pool"].connection() as conn:
+        return list_incidents(conn, equipment_id=equipment_id)
+
+
+@app.get("/incidents/{incident_id}")
+def incident_get(incident_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.incidents import get_incident
+    with STATE["pool"].connection() as conn:
+        inc = get_incident(conn, incident_id)
+    if not inc:
+        raise HTTPException(404, "incident not found")
+    return inc
+
+
+@app.get("/incidents/{incident_id}/replay")
+def incident_replay(incident_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.incidents import incident_replay as replay
+    with STATE["pool"].connection() as conn:
+        data = replay(conn, incident_id)
+    if not data:
+        raise HTTPException(404, "incident not found")
+    return data
+
+
+@app.get("/incidents/{incident_id}/lessons")
+def incident_lessons(incident_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.incidents import incident_lessons as lessons
+    with STATE["pool"].connection() as conn:
+        return lessons(conn, incident_id)
+
+
+@app.get("/spares")
+def spares_catalog(equipment_id: str | None = None, low_stock: bool = False,
+                   user: AuthUser = Depends(current_user)) -> list[dict]:
+    from backend.tools.inventory_optimizer import list_spares_catalog
+    with STATE["pool"].connection() as conn:
+        return list_spares_catalog(conn, equipment_id=equipment_id, low_stock=low_stock)
+
+
+@app.get("/inventory/optimizer")
+def inventory_optimizer(user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.inventory_optimizer import compute_optimizer
+    with STATE["pool"].connection() as conn:
+        return compute_optimizer(conn)
+
+
+@app.get("/reliability/plant")
+def reliability_plant(user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.reliability_analytics import reliability_plant as plant
+    with STATE["pool"].connection() as conn:
+        return plant(conn)
+
+
+@app.get("/reliability/{eq_id}")
+def reliability_equipment(eq_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.reliability_analytics import reliability_for_equipment
+    with STATE["pool"].connection() as conn:
+        data = reliability_for_equipment(conn, eq_id)
+    if not data:
+        raise HTTPException(404, "unknown equipment")
+    return data
+
+
+@app.get("/leadership/roi")
+def leadership_roi(user: AuthUser = Depends(current_user)) -> dict:
+    from backend.tools.leadership_roi import compute_leadership_roi
+    with STATE["pool"].connection() as conn:
+        return compute_leadership_roi(conn)
+
+
+@app.get("/equipment/{eq_id}/context")
+def equipment_context(eq_id: str, user: AuthUser = Depends(current_user)) -> dict:
+    """Composite live risk context for the operational console."""
+    from backend.tools.inventory_optimizer import list_spares_catalog
+    from backend.tools.leadership_roi import _inr
+    from backend.tools.plant_summary import BASE_INR_PER_HR, DEFAULT_DOWNTIME_HRS
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT e.id, e.name, e.zone, e.criticality, h.anomaly_score, h.is_anomalous, "
+            "h.rul_days, h.contributing_sensors FROM equipment e "
+            "LEFT JOIN equipment_health h ON h.equipment_id = e.id WHERE e.id = %s", (eq_id,))
+        e = cur.fetchone()
+        if not e:
+            raise HTTPException(404, "unknown equipment")
+        cur.execute("SELECT id, severity, title FROM alerts WHERE equipment_id = %s AND acked_at IS NULL "
+                    "ORDER BY created_at DESC LIMIT 5", (eq_id,))
+        alerts = [{"id": str(r[0]), "severity": r[1], "title": r[2]} for r in cur.fetchall()]
+        cur.execute("SELECT id, title, status, priority FROM work_orders WHERE equipment_id = %s "
+                    "AND status NOT IN ('completed','cancelled') ORDER BY priority DESC LIMIT 5", (eq_id,))
+        wos = [{"id": str(r[0]), "title": r[1], "status": r[2], "priority": r[3]} for r in cur.fetchall()]
+        cur.execute("SELECT total_downtime_hrs, breakdowns FROM v_downtime_by_equipment WHERE equipment_id = %s",
+                    (eq_id,))
+        dt = cur.fetchone()
+        avg_hrs = DEFAULT_DOWNTIME_HRS
+        if dt and dt[1]:
+            avg_hrs = float(dt[0] or 0) / max(int(dt[1]), 1)
+        spares = list_spares_catalog(conn, equipment_id=eq_id)
+    at_risk = bool(e[5]) and (e[6] is not None and float(e[6]) < 14)
+    failure_cost = avg_hrs * BASE_INR_PER_HR * float(e[3] or 1) if at_risk else 0
+    return {
+        "equipment_id": e[0], "name": e[1], "zone": e[2], "criticality": e[3],
+        "anomaly_score": e[4], "is_anomalous": e[5], "rul_days": e[6],
+        "contributing_sensors": e[7] or [],
+        "open_alerts": alerts, "open_work_orders": wos, "spares": spares[:3],
+        "downtime_at_risk_inr": round(failure_cost),
+        "downtime_at_risk_label": _inr(failure_cost) if failure_cost else "—",
+    }
+
+
+@app.get("/maintenance/logbook")
+def maintenance_logbook(equipment_id: str | None = None, user: AuthUser = Depends(current_user)) -> list[dict]:
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        if equipment_id:
+            cur.execute("SELECT id, equipment_id, author_type, entry_type, content, created_at "
+                        "FROM logbook WHERE equipment_id = %s ORDER BY created_at DESC LIMIT 30",
+                        (equipment_id,))
+        else:
+            cur.execute("SELECT id, equipment_id, author_type, entry_type, content, created_at "
+                        "FROM logbook ORDER BY created_at DESC LIMIT 30")
+        return [{"id": str(r[0]), "equipment_id": r[1], "author_type": r[2], "entry_type": r[3],
+                 "content": r[4], "created_at": str(r[5])} for r in cur.fetchall()]
+
+
+@app.post("/maintenance/handover")
+def maintenance_handover(body: HandoverIn, user: AuthUser = Depends(current_user)) -> dict:
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO logbook (equipment_id, author_type, author_id, entry_type, content) "
+            "VALUES (%s, 'human', %s, 'shift_handover', %s) RETURNING id",
+            (body.equipment_id, user.id, Json({
+                "notes": body.notes,
+                "open_work_orders": body.open_work_orders or [],
+                "risk_context": body.risk_context or {},
+            })))
+        lid = cur.fetchone()[0]
+    return {"ok": True, "logbook_id": str(lid)}
 
 
 # ---------------- §5.4 reports (ReportLab PDF) ----------------
