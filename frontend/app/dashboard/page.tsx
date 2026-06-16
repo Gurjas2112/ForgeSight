@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, Boxes } from "lucide-react";
 import { getAlerts, getEquipment, getPlantSummary } from "@/lib/api";
 import type { Alert, Equipment, PlantSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/ui";
@@ -44,6 +44,10 @@ function Overview() {
               title="Sensor data is a physics-shaped digital twin of a steel plant — the governance, ML and reasoning run live on it.">
               Digital twin · simulated sensors
             </span>
+            <Link href="/dashboard/twin"
+              className="text-[11px] px-2.5 py-1 rounded-md bg-[#4A90D9] text-white font-medium hover:bg-[#3a7bc0] inline-flex items-center gap-1">
+              <Boxes size={13} /> 3D Digital Twin
+            </Link>
           </div>
           <p className="text-sm text-[#8B98A5]">{eq.length} critical assets · governed multi-agent decision support</p>
         </div>
