@@ -1,0 +1,38 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Segoe UI
+skinparam shadowing false
+skinparam ArrowColor #4A90D9
+skinparam rectangleBorderColor #232B35
+title Governed Multi-Agent Workflow (LangGraph)
+start
+:Ingest & Authorize\n(JWT role · reset per-turn budget);
+:Cache lookup;
+if (golden cache hit?) then (yes)
+  :Serve cached card;
+  stop
+else (no)
+endif
+:Classify intent (SLM);
+partition "Chartered agents — deterministic tool pipelines" {
+  split
+    :Diagnostic\nRAG + match_history;
+  split again
+    :Reliability\nhealth + RUL;
+  split again
+    :Supervisor\nscore_priority;
+  split again
+    :Planner\nspares + procurement;
+  split again
+    :Analyst\ngoverned SQL;
+  end split
+}
+:Synthesize card\n(SLM · constrained JSON);
+:Guardrail validate\ncitations · LOTO-first · provenance;
+if (COMMIT action?) then (yes)
+  :Human gate (approve / reject);
+else (no)
+endif
+:Respond — structured cited card;
+stop
+@enduml

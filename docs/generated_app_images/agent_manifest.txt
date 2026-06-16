@@ -1,0 +1,7 @@
+agent-diagnostic-diagnosis.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: What's causing the DE bearing vibration on the sinter ID fan?
+agent-diagnostic-checklist.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: Give me the step-by-step LOTO procedure to replace the DE bearing safely.
+agent-reliability-rul.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: How many days of life are left on this fan before it trips?
+agent-reliability-wait.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: Can it wait until Sunday's shutdown?
+agent-supervisor-priority.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: What's the maintenance priority for this fan, and how urgent is it?
+agent-planner-spares.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: Do we have the replacement DE bearing in stock, and what's the lead time?
+agent-analyst-sql.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2  |  prompt: Which equipment has had the most downtime?

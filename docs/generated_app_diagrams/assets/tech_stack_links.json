@@ -1,0 +1,102 @@
+{
+  "Frontend": [
+    {
+      "name": "Next.js 16",
+      "url": "https://nextjs.org"
+    },
+    {
+      "name": "React 19",
+      "url": "https://react.dev"
+    },
+    {
+      "name": "TypeScript",
+      "url": "https://www.typescriptlang.org"
+    },
+    {
+      "name": "Tailwind CSS",
+      "url": "https://tailwindcss.com"
+    },
+    {
+      "name": "react-three-fiber / three.js",
+      "url": "https://threejs.org"
+    },
+    {
+      "name": "Recharts",
+      "url": "https://recharts.org"
+    }
+  ],
+  "Backend & Agents": [
+    {
+      "name": "FastAPI",
+      "url": "https://fastapi.tiangolo.com"
+    },
+    {
+      "name": "Python 3.12",
+      "url": "https://www.python.org"
+    },
+    {
+      "name": "LangGraph",
+      "url": "https://www.langchain.com/langgraph"
+    },
+    {
+      "name": "Pydantic",
+      "url": "https://pydantic.dev"
+    },
+    {
+      "name": "Uvicorn",
+      "url": "https://www.uvicorn.org"
+    },
+    {
+      "name": "ReportLab (PDF)",
+      "url": "https://www.reportlab.com"
+    }
+  ],
+  "AI / ML": [
+    {
+      "name": "Qwen2.5-3B via Ollama",
+      "url": "https://ollama.com"
+    },
+    {
+      "name": "Groq \u00b7 Llama-3.3-70B",
+      "url": "https://groq.com"
+    },
+    {
+      "name": "nomic-embed-text",
+      "url": "https://www.nomic.ai"
+    },
+    {
+      "name": "scikit-learn",
+      "url": "https://scikit-learn.org"
+    },
+    {
+      "name": "XGBoost / LightGBM",
+      "url": "https://xgboost.ai"
+    },
+    {
+      "name": "QLoRA \u00b7 Unsloth",
+      "url": "https://unsloth.ai"
+    }
+  ],
+  "Data & Infra": [
+    {
+      "name": "Supabase (Postgres+pgvector)",
+      "url": "https://supabase.com"
+    },
+    {
+      "name": "Railway (backend)",
+      "url": "https://railway.app"
+    },
+    {
+      "name": "Vercel (frontend)",
+      "url": "https://vercel.com"
+    },
+    {
+      "name": "Docker",
+      "url": "https://www.docker.com"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com"
+    }
+  ]
+}

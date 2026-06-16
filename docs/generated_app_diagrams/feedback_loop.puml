@@ -1,0 +1,21 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Segoe UI
+skinparam shadowing false
+skinparam ArrowColor #4A90D9
+skinparam rectangleBorderColor #232B35
+title Feedback-Driven Improvement Loop (FR-6)
+start
+:Engineer reviews the cited card;
+:Verdict — up / down / "this fixed it";
+:POST /feedback;
+fork
+  :down -> demote the cited record\n(retrieval re-rank);
+fork again
+  :fixed -> inject confirmed cause\n(synthesis few-shot exemplar);
+fork again
+  :fixed -> breakdown_history.verified = true\n+ logbook entry;
+end fork
+:Future answers improve\n(sharper citations & root-cause);
+stop
+@enduml

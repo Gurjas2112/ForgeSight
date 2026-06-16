@@ -1,0 +1,27 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Segoe UI
+skinparam shadowing false
+skinparam ArrowColor #4A90D9
+skinparam rectangleBorderColor #232B35
+title Maintenance Decision Lifecycle
+state "Fault / Anomaly Alert" as A
+state "AI Diagnosis (cited RCA)" as B
+state "RUL & Risk Forecast" as C
+state "Priority & Bottleneck Scoring" as D
+state "Spares & Procurement\n(lead time vs RUL)" as E
+state "Work Order\n(generate · status · export)" as F
+state "Execution\n(LOTO-first checklist)" as G
+state "Feedback & Verification" as H
+state "Knowledge Update\n(verified records)" as I
+[*] --> A
+A --> B
+B --> C
+C --> D
+D --> E
+E --> F
+F --> G
+G --> H
+H --> I
+I --> A : continuous improvement
+@enduml

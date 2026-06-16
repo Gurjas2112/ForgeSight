@@ -1,0 +1,14 @@
+home.png  <-  https://forge-sight-one.vercel.app/
+login.png  <-  https://forge-sight-one.vercel.app/login
+signup.png  <-  https://forge-sight-one.vercel.app/signup
+dashboard.png  <-  https://forge-sight-one.vercel.app/dashboard
+dashboard-evidence.png  <-  https://forge-sight-one.vercel.app/dashboard/evidence
+dashboard-work-orders.png  <-  https://forge-sight-one.vercel.app/dashboard/work-orders
+dashboard-incidents.png  <-  https://forge-sight-one.vercel.app/dashboard/incidents
+dashboard-spares.png  <-  https://forge-sight-one.vercel.app/dashboard/spares
+dashboard-reliability.png  <-  https://forge-sight-one.vercel.app/dashboard/reliability
+dashboard-leadership.png  <-  https://forge-sight-one.vercel.app/dashboard/leadership
+dashboard-twin.png  <-  https://forge-sight-one.vercel.app/dashboard/twin
+equipment-sinter-fan-2.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2
+equipment-hsm-f3-stand.png  <-  https://forge-sight-one.vercel.app/equipment/hsm-f3-stand
+equipment-sinter-fan-2-diagnosis.png  <-  https://forge-sight-one.vercel.app/equipment/sinter-fan-2 (copilot diagnosis)

@@ -1,0 +1,37 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Segoe UI
+skinparam shadowing false
+skinparam ArrowColor #4A90D9
+skinparam rectangleBorderColor #232B35
+skinparam componentStyle rectangle
+skinparam componentBackgroundColor #EEF4FB
+skinparam componentBorderColor #4A90D9
+skinparam databaseBackgroundColor #FFF1E8
+skinparam databaseBorderColor #FF6A2B
+title ForgeSight — Backend Architecture
+actor Engineer
+cloud "Next.js 16 Frontend\n(Vercel)" as FE
+package "FastAPI Backend  (Railway · Docker)" {
+  [REST API\n/chat /equipment /alerts\n/work-orders /search /reports] as API
+  [Auth\nSupabase JWT · RLS\nengineer / admin] as AUTH
+  [AgentController\nLangGraph governed graph] as CTRL
+  [Guardrails\ncitations · LOTO · budgets] as GUARD
+  [Tools\nRAG · ML · text-to-SQL · reports] as TOOLS
+  [Scheduler\nhealth re-scan -> alerts] as SCHED
+}
+database "Supabase\nPostgres + pgvector" as DB
+[Synthesis SLM\nOllama Qwen (on-prem)\nGroq Llama-3.3 (cloud)] as SLM
+[Classical ML\nanomaly · RUL · failure\ndefect · Azure-PdM] as ML
+Engineer --> FE
+FE --> API : HTTPS + Bearer JWT
+API --> AUTH
+API --> CTRL
+CTRL --> GUARD
+CTRL --> TOOLS
+CTRL --> SLM
+TOOLS --> DB
+TOOLS --> ML
+SCHED --> DB
+API --> DB
+@enduml

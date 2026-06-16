@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Segoe UI
+skinparam shadowing false
+skinparam ArrowColor #4A90D9
+skinparam rectangleBorderColor #232B35
+skinparam rectangleBackgroundColor #EEF4FB
+title Knowledge-Center Ingestion & RAG Pipeline
+rectangle "Equipment Manuals" as M
+rectangle "Maintenance SOPs" as S
+rectangle "Breakdown / Incident Records" as B
+rectangle "Spares & Work Orders" as W
+rectangle "Section-aware Chunker" as CH #FFF1E8
+rectangle "Embedder\nnomic-embed-text" as EMB #FFF1E8
+database "doc_chunks\npgvector + tsvector" as VEC
+M --> CH
+S --> CH
+B --> CH
+W --> CH
+CH --> EMB
+EMB --> VEC
+actor Engineer
+rectangle "Query\n(fault code / NL question)" as Q
+rectangle "Hybrid Retrieval\nvector + full-text (RRF)" as RET #E9F7F1
+rectangle "Enum-constrained\nCitations" as CIT #E9F7F1
+rectangle "SLM Synthesis\n(grounded, cited card)" as SYN #E9F7F1
+Engineer --> Q
+Q --> RET
+VEC --> RET
+RET --> CIT
+CIT --> SYN
+SYN --> Engineer : cited answer
+@enduml
