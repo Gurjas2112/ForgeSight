@@ -15,7 +15,7 @@ fine-tuned open-source SLM (no plant data needs to leave the network).
 | | |
 |---|---|
 | 🌐 **Live app (Vercel)** | **https://forge-sight-one.vercel.app** |
-| ⚙️ **Backend API (Railway)** | https://forgesight-api-production.up.railway.app · [project](https://railway.com/project/7db214e3-1857-4961-947d-cd1ecc851d3f) |
+| ⚙️ **Backend API (Railway)** | https://forgesight-production.up.railway.app · [project](https://railway.com/project/7f6d4bd2-3cf9-438b-9c84-69353775344d) |
 | 💻 **Source (GitHub)** | https://github.com/Gurjas2112/ForgeSight |
 | 📹 **Demo video / submission (Google Drive)** | **https://drive.google.com/file/d/1_cvKuAnfQ_ug0OQ9_8_KIiTLRUVjVhCo/view?usp=sharing** |
 | 🖼️ **Slide deck** | [`ForgeSight_Submission.pptx`](ForgeSight_Submission.pptx) |

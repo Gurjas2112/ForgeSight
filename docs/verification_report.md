@@ -50,7 +50,7 @@ are recorded below for awareness.
   `C:\Users\Gurjas Gandhi\package-lock.json`; cosmetic, set `turbopack.root` to silence.
 
 ## 6. Deployed backend (Railway) — PASS
-Base URL: `https://forgesight-api-production.up.railway.app`
+Base URL: `https://forgesight-production.up.railway.app`
 - `GET /healthz` → `{"ok":true,"db":true,"synthesis_backend":"hosted","model":"groq:llama-3.3-70b-versatile","scheduler":true}`
 - `GET /equipment` → live list (caster-1, hsm-f3-stand, …) with anomaly scores + RUL.
 - `GET /alerts` → CRITICAL `sinter-fan-2` (anomaly 0.626, RUL ≈ 3.3d).
@@ -65,7 +65,7 @@ Base URL: `https://forgesight-api-production.up.railway.app`
 Base URL: `https://forge-sight-one.vercel.app`
 - Landing (`/`) HTTP 200, renders hero "fault code to fix plan" + Login/Signup CTAs.
 - `/login` HTTP 200 with prefilled `engineer@demo.forgesight`; `/dashboard` shell HTTP 200.
-- Deployed JS bundle has both `forgesight-api-production.up.railway.app` and
+- Deployed JS bundle has both `forgesight-production.up.railway.app` and
   `djmkavlurexdezyvvhcu.supabase.co` inlined → correctly wired to the Railway backend + Supabase auth.
 - **Auth flow proven without a browser:** Supabase password login for the seeded **engineer** and
   **admin** both issue valid ES256 JWTs; backend `GET /auth/me` decodes them to

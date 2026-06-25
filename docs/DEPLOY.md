@@ -41,7 +41,7 @@ python backend/scheduler/health_scan.py --once   # equipment_health + CRITICAL f
 
 # --- Deploy ---
 railway up --detach
-railway domain    # generates https://forgesight-api-production.up.railway.app
+railway domain    # generates https://forgesight-production.up.railway.app
 ```
 
 Backend env: `SYNTHESIS_BACKEND=hosted`, `RETRIEVAL_MODE=fulltext`,
@@ -60,7 +60,7 @@ set **Root Directory** to `frontend`, then **Redeploy** from the latest `main` c
 connected). Without this, builds run at the repo root and production returns 404.
 
 Set **production** env vars (Project → Settings → Environment Variables):
-vercel env add NEXT_PUBLIC_API_URL production   # value: https://forgesight-api-production.up.railway.app
+vercel env add NEXT_PUBLIC_API_URL production   # value: https://forgesight-production.up.railway.app
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 vercel --prod
@@ -70,12 +70,12 @@ vercel --prod
 `https://forge-sight-one.vercel.app` → Landing page → Login (demo engineer) → Plant Overview
 (F3 critical tile) → F3 detail → "diagnose the F3 trip" → DiagnosisCard + Evidence drawer →
 Sinter Fan #2 → "can it wait till Sunday?" → WaitAssessment + Approve. Browser network calls
-should hit `forgesight-api-production.up.railway.app` with no CORS errors.
+should hit `forgesight-production.up.railway.app` with no CORS errors.
 
 ## Live URLs
 - **Frontend:** https://forge-sight-one.vercel.app
-- **Backend:** https://forgesight-api-production.up.railway.app
-- **Health check:** https://forgesight-api-production.up.railway.app/healthz
+- **Backend:** https://forgesight-production.up.railway.app
+- **Health check:** https://forgesight-production.up.railway.app/healthz
 
 ## Notes
 - The Docker image excludes `data/`, `ml/`, `finetune/`, `frontend/` (see `.dockerignore`) — only
