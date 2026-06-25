@@ -42,3 +42,46 @@ Each model dir holds `test.csv` (inputs, no label), `submission.csv` (prediction
 
 `rul/submission.csv` is the canonical C-MAPSS FD001 test set (100 engine units), aligned to
 `data/raw/cmapss/RUL_FD001.txt`.
+
+## Train → publish → serve
+
+```
+data/ (raw + synthetic) ──► ml/<model>/train.py ──► ml/<model>/export/*.joblib|.json
+                                                       │ mlio.publish()
+                                                       ▼
+                                            backend/models/*  ──►  loaded once (@lru_cache)
+                                                       │           by backend/tools/ml_tools.py
+                                                       ▼
+                                   live tools: check_equipment_health · estimate_rul ·
+                                   analyze_defect · predict_failure · predict_pdm_24h
+```
+
+- Training never runs inside the API — it produces static artifacts that `mlio.publish()` copies into
+  [`backend/models/`](../backend/models/).
+- At runtime [`backend/tools/ml_tools.py`](../backend/tools/ml_tools.py) loads them once and the agent
+  pipelines call them deterministically; the SLM only narrates the numbers, never computes them.
+- `GET /models/scorecard` (and `GET /admin/metrics`) surface a **live held-out inference** per model —
+  every advertised number is a real, reproducible model output, not a static claim.
+- Train/serve parity is enforced by `ml/shared/feature_config.json`, read by both `train.py` and
+  `ml_tools.py`.
+
+## SLM synthesis & the fine-tune
+
+The classical models above produce the numbers; a **small language model** (Qwen2.5-3B) narrates them
+into typed, cited cards under constrained JSON decoding ([`backend/agent/synthesis.py`](../backend/agent/synthesis.py)).
+
+- **Default runtime:** base `qwen2.5:3b-instruct` (on-prem via Ollama) or the Groq hosted fallback
+  (cloud, no GPU). Citation compliance is already structural via constrained decoding, so base is safe.
+- **Fine-tuned variant:** `qwen-forgesight` (QLoRA on Qwen2.5-3B). The GGUF is **verified deployable**
+  locally via Ollama; promote it (`OLLAMA_MODEL=qwen-forgesight`) **only** if it beats base on citation
+  compliance AND number fidelity. Full pipeline: [`../finetune/finetuning_workflow.md`](../finetune/finetuning_workflow.md).
+
+## PS §5 (predictive outputs) mapping
+
+| PS requirement | Model / mechanism |
+|---|---|
+| Remaining Useful Life (RUL) | `rul` (C-MAPSS XGBoost) → `estimate_rul` |
+| Early warning of catastrophic failure | anomaly + RUL gate (CRITICAL when RUL < spares lead time) |
+| Abnormality / anomaly detection | `anomaly` (IsolationForest + EWMA) + `health_scan` scheduler |
+| Failure prediction | `failure_classifier` (AI4I), `azure_pdm` (24h-ahead) |
+| Process defect detection | `defect` (UCI Steel Plates, LightGBM) |

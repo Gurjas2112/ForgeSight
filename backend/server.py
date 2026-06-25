@@ -20,7 +20,7 @@ from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from psycopg.types.json import Json
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, field_validator
 
 from backend.agent.build import build_controller
 from backend.agent.demo_cards import golden_demo_cache
@@ -101,10 +101,19 @@ class FeedbackIn(BaseModel):
 
 
 class SignupIn(BaseModel):
-    email: str
+    email: EmailStr                       # RFC-validated server-side (422 on malformed input)
     password: str
     full_name: str | None = None
     role: Literal["engineer", "admin"] = "engineer"
+
+    @field_validator("password")
+    @classmethod
+    def _strong_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one letter and one number")
+        return v
 
 
 class WorkOrderIn(BaseModel):
@@ -142,6 +151,19 @@ def require_admin(user: AuthUser = Depends(current_user)) -> AuthUser:
     if user.role != "admin":
         raise HTTPException(403, "admin only")
     return user
+
+
+def _audit_signup_downgrade(email: str) -> None:
+    """Record a denied self-assign-admin signup attempt (best-effort, never breaks the request)."""
+    try:
+        with STATE["pool"].connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO audit_log (agent_name, action, resource, allowed, reason, detail) "
+                "VALUES ('auth', 'signup_admin', 'auth.users', false, "
+                "'public signup may not self-assign admin; downgraded to engineer', %s::jsonb)",
+                (Json({"email": email}),))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ---------------- helpers ----------------
@@ -186,12 +208,15 @@ def signup(body: SignupIn, authorization: str | None = Header(default=None)) -> 
     (Bearer token) — this closes the self-assign-admin hole; the route, not just the GoTrue helper,
     now enforces authorization. Seeded `admin@demo.forgesight` remains the reliable admin path.
     """
-    from backend.auth.supabase_admin import create_user
+    from backend.auth.supabase_admin import DuplicateUserError, create_user
     role = body.role
     if role == "admin" and user_from_header(authorization).role != "admin":
         role = "engineer"  # downgrade unauthorized admin requests rather than 500
+        _audit_signup_downgrade(body.email)
     try:
-        u = create_user(body.email, body.password, role, body.full_name)
+        u = create_user(str(body.email), body.password, role, body.full_name)
+    except DuplicateUserError:
+        raise HTTPException(409, "An account with this email already exists. Try logging in.")
     except Exception as e:  # noqa: BLE001
         raise HTTPException(400, f"signup failed: {e}")
     try:
@@ -210,10 +235,29 @@ def me(user: AuthUser = Depends(current_user)) -> dict:
     return {"id": user.id, "role": user.role}
 
 
+def _ensure_session(session_id: str, user: AuthUser, equipment_id: str | None, message: str) -> None:
+    """Create the chat_sessions row on first turn (so chat_messages' FK is satisfied) and log the
+    user's message. Without this the persistence egress silently fails the FK and no history is
+    stored. Best-effort: a DB hiccup must never break the turn."""
+    title = (message or "").strip()[:60] or "New conversation"
+    try:
+        with STATE["pool"].connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO chat_sessions (id, user_id, equipment_id, title) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET updated_at = now()",
+                (session_id, user.id, equipment_id, title))
+            cur.execute(
+                "INSERT INTO chat_messages (session_id, role, content) VALUES (%s, 'user', %s)",
+                (session_id, message))
+    except Exception as e:  # noqa: BLE001
+        print(f"  [persist] ensure_session failed (non-fatal): {e}")
+
+
 @app.post("/chat")
 def chat(body: ChatIn, user: AuthUser = Depends(current_user)) -> dict:
     controller = STATE["controller"]
     session_id = body.session_id or str(uuid.uuid4())
+    _ensure_session(session_id, user, body.equipment_id, body.message)
     inputs = {
         "messages": [HumanMessage(content=body.message)],
         "user": user,
@@ -242,6 +286,39 @@ def approve(body: ApproveIn) -> dict:
     out["session_id"] = body.session_id
     out["approved"] = body.approved
     return out
+
+
+@app.get("/chat/sessions")
+def chat_sessions(user: AuthUser = Depends(current_user)) -> list[dict]:
+    """List the caller's conversations (admins see all) for the copilot history switcher."""
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        base = ("SELECT s.id, s.title, s.equipment_id, s.updated_at, count(m.id) "
+                "FROM chat_sessions s LEFT JOIN chat_messages m ON m.session_id = s.id ")
+        if user.role == "admin":
+            cur.execute(base + "GROUP BY s.id ORDER BY s.updated_at DESC LIMIT 50")
+        else:
+            cur.execute(base + "WHERE s.user_id = %s GROUP BY s.id "
+                        "ORDER BY s.updated_at DESC LIMIT 50", (user.id,))
+        return [{"id": str(r[0]), "title": r[1], "equipment_id": r[2],
+                 "updated_at": str(r[3]), "message_count": int(r[4])} for r in cur.fetchall()]
+
+
+@app.get("/chat/sessions/{session_id}/messages")
+def chat_session_messages(session_id: str, user: AuthUser = Depends(current_user)) -> list[dict]:
+    """Return a conversation's ordered messages (with timestamps) so the UI can restore it.
+    Only the owner — or an admin — may read a session."""
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT user_id FROM chat_sessions WHERE id = %s", (session_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(404, "session not found")
+        if user.role != "admin" and str(row[0]) != str(user.id):
+            raise HTTPException(403, "not your session")
+        cur.execute(
+            "SELECT role, content, card_json, agent_name, created_at FROM chat_messages "
+            "WHERE session_id = %s ORDER BY created_at", (session_id,))
+        return [{"role": r[0], "content": r[1], "card": r[2], "agent_name": r[3],
+                 "created_at": str(r[4])} for r in cur.fetchall()]
 
 
 @app.get("/equipment")
@@ -367,6 +444,100 @@ def plant_summary() -> dict:
                     "GROUP BY equipment_id")
         al = [{"equipment_id": r[0], "severity": r[1]} for r in cur.fetchall()]
     return compute_plant_summary(eq, dt, al)
+
+
+# ---------------- admin (system metrics) ----------------
+
+@app.get("/admin/metrics")
+def admin_metrics(_: AuthUser = Depends(require_admin)) -> dict:
+    """Admin-only system scorecard — every value is a live aggregate over the operational DB
+    (accounts, knowledge corpus, conversations, feedback, work orders, governance audit) plus
+    the deterministic plant KPI header. No hardcoded numbers."""
+    from backend.tools.plant_summary import compute_plant_summary
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        def scalar(sql: str, params: tuple = ()) -> int:
+            cur.execute(sql, params)
+            r = cur.fetchone()
+            return int(r[0]) if r and r[0] is not None else 0
+
+        cur.execute("SELECT role, count(*) FROM profiles GROUP BY role")
+        accounts_by_role = {r[0]: int(r[1]) for r in cur.fetchall()}
+        cur.execute("SELECT status, count(*) FROM work_orders GROUP BY status")
+        work_orders_by_status = {r[0]: int(r[1]) for r in cur.fetchall()}
+        cur.execute("SELECT verdict, count(*) FROM feedback GROUP BY verdict")
+        feedback_by_verdict = {r[0]: int(r[1]) for r in cur.fetchall()}
+
+        metrics = {
+            "accounts": {
+                "total": sum(accounts_by_role.values()),
+                "by_role": accounts_by_role,
+            },
+            "knowledge": {
+                "equipment": scalar("SELECT count(*) FROM equipment"),
+                "doc_chunks": scalar("SELECT count(*) FROM doc_chunks"),
+                "spares": scalar("SELECT count(*) FROM spares"),
+                "breakdown_records": scalar("SELECT count(*) FROM breakdown_history"),
+            },
+            "conversations": {
+                "sessions": scalar("SELECT count(*) FROM chat_sessions"),
+                "messages": scalar("SELECT count(*) FROM chat_messages"),
+                "active_24h": scalar(
+                    "SELECT count(*) FROM chat_sessions WHERE updated_at > now() - interval '24 hours'"),
+            },
+            "feedback": {
+                "total": sum(feedback_by_verdict.values()),
+                "by_verdict": feedback_by_verdict,
+            },
+            "work_orders": {
+                "total": sum(work_orders_by_status.values()),
+                "by_status": work_orders_by_status,
+            },
+            "governance": {
+                "audit_events_total": scalar("SELECT count(*) FROM audit_log"),
+                "audit_events_24h": scalar(
+                    "SELECT count(*) FROM audit_log WHERE ts > now() - interval '24 hours'"),
+                "denied_24h": scalar(
+                    "SELECT count(*) FROM audit_log WHERE allowed = false "
+                    "AND ts > now() - interval '24 hours'"),
+            },
+            "alerts": {
+                "open": scalar("SELECT count(*) FROM alerts WHERE acked_at IS NULL"),
+            },
+        }
+
+        # deterministic plant KPI header (reuses /plant/summary's compute path)
+        cur.execute("SELECT e.id, e.criticality, h.is_anomalous, h.rul_days "
+                    "FROM equipment e LEFT JOIN equipment_health h ON h.equipment_id=e.id")
+        eq = [{"id": r[0], "criticality": r[1], "is_anomalous": r[2], "rul_days": r[3]}
+              for r in cur.fetchall()]
+        cur.execute("SELECT equipment_id, total_downtime_hrs, breakdowns FROM v_downtime_by_equipment")
+        dt = [{"equipment_id": r[0], "total_downtime_hrs": r[1], "breakdowns": r[2]}
+              for r in cur.fetchall()]
+        cur.execute("SELECT equipment_id, max(severity) FROM alerts WHERE acked_at IS NULL "
+                    "GROUP BY equipment_id")
+        al = [{"equipment_id": r[0], "severity": r[1]} for r in cur.fetchall()]
+    metrics["plant"] = compute_plant_summary(eq, dt, al)
+    return metrics
+
+
+@app.get("/admin/users")
+def admin_users(_: AuthUser = Depends(require_admin)) -> list[dict]:
+    """Admin-only account roster (from `profiles`)."""
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, full_name, role, area FROM profiles ORDER BY role, full_name")
+        return [{"id": str(r[0]), "full_name": r[1], "role": r[2], "area": r[3]}
+                for r in cur.fetchall()]
+
+
+@app.get("/admin/audit")
+def admin_audit(limit: int = 50, _: AuthUser = Depends(require_admin)) -> list[dict]:
+    """Admin-only recent governance audit trail (allow/deny decisions)."""
+    limit = max(1, min(limit, 200))
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT agent_name, action, resource, allowed, reason, ts "
+                    "FROM audit_log ORDER BY ts DESC LIMIT %s", (limit,))
+        return [{"agent_name": r[0], "action": r[1], "resource": r[2], "allowed": r[3],
+                 "reason": r[4], "ts": str(r[5])} for r in cur.fetchall()]
 
 
 # ---------------- dashboard modules ----------------

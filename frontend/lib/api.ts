@@ -1,5 +1,6 @@
 import type {
-  Alert, ChatResponse, Equipment, EquipmentContext, EquipmentDetail,
+  AdminMetrics, AdminUser, Alert, AuditEvent, ChatHistoryMessage, ChatResponse,
+  ChatSessionSummary, Equipment, EquipmentContext, EquipmentDetail,
   Incident, LeadershipROI, LogbookEntry, OptimizerResult, PlantSummary,
   ReliabilityData, Scorecard, SearchItem, SpareCatalogItem, WorkOrder,
 } from "./types";
@@ -134,3 +135,17 @@ export const postHandover = async (body: { equipment_id: string; notes: string; 
   }).then(j<{ ok: boolean; logbook_id: string }>);
 
 export const evidenceUrl = (ref: string) => `${API}/evidence?ref=${encodeURIComponent(ref)}`;
+
+// ---- admin (admin-only; require Bearer token) ----
+export const getAdminMetrics = async () =>
+  fetch(`${API}/admin/metrics`, { cache: "no-store", headers: await authHeaders() }).then(j<AdminMetrics>);
+export const getAdminUsers = async () =>
+  fetch(`${API}/admin/users`, { cache: "no-store", headers: await authHeaders() }).then(j<AdminUser[]>);
+export const getAdminAudit = async (limit = 50) =>
+  fetch(`${API}/admin/audit?limit=${limit}`, { cache: "no-store", headers: await authHeaders() }).then(j<AuditEvent[]>);
+
+// ---- copilot history (per-user; require Bearer token) ----
+export const getChatSessions = async () =>
+  fetch(`${API}/chat/sessions`, { cache: "no-store", headers: await authHeaders() }).then(j<ChatSessionSummary[]>);
+export const getChatMessages = async (sessionId: string) =>
+  fetch(`${API}/chat/sessions/${sessionId}/messages`, { cache: "no-store", headers: await authHeaders() }).then(j<ChatHistoryMessage[]>);

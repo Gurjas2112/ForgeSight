@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "./AuthProvider";
 
 const TABS = [
   { href: "/dashboard", label: "Overview", exact: true },
@@ -15,10 +16,12 @@ const TABS = [
 
 export function DashboardTabs() {
   const path = usePathname();
+  const { role } = useAuth();
+  const tabs = role === "admin" ? [...TABS, { href: "/dashboard/admin", label: "Admin" }] : TABS;
   return (
     <div className="border-b border-[#232B35] mb-5 -mx-5 px-5 overflow-x-auto">
       <nav className="flex gap-1 min-w-max">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active = t.exact ? path === t.href : path.startsWith(t.href);
           return (
             <Link key={t.href} href={t.href}

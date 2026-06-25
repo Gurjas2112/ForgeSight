@@ -3,17 +3,22 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabase, authConfigured } from "@/lib/supabase";
+import { validateEmail } from "@/lib/validate";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("engineer@demo.forgesight");
-  const [password, setPassword] = useState("forgesight-demo");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
+
+  const emailErr = validateEmail(email);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(undefined);
+    if (emailErr) { setErr(emailErr); return; }
+    if (!password) { setErr("Password is required."); return; }
     const sb = getSupabase();
     if (!sb) { setErr("Auth is not configured (missing Supabase env)."); return; }
     setBusy(true);
@@ -28,8 +33,8 @@ export default function LoginPage() {
       <h1 className="text-2xl font-semibold mb-1">Log in</h1>
       <p className="text-sm text-[#8B98A5] mb-6">Access the ForgeSight control room.</p>
       {!authConfigured() && <div className="panel p-3 mb-4 text-sm text-[#E8B931]">Supabase auth isn’t configured in this environment.</div>}
-      <form onSubmit={submit} className="space-y-3">
-        <Field label="Email" type="email" value={email} onChange={setEmail} />
+      <form onSubmit={submit} className="space-y-3" noValidate>
+        <Field label="Email" type="email" value={email} onChange={setEmail} error={email ? emailErr : undefined} />
         <Field label="Password" type="password" value={password} onChange={setPassword} />
         {err && <div className="text-sm text-[#E5484D]">{err}</div>}
         <button type="submit" disabled={busy} className="w-full py-2 rounded-lg bg-[#4A90D9] text-white font-medium disabled:opacity-50">
@@ -37,17 +42,20 @@ export default function LoginPage() {
         </button>
       </form>
       <p className="text-sm text-[#8B98A5] mt-4">No account? <Link href="/signup" className="text-[#4A90D9] hover:underline">Sign up</Link></p>
-      <p className="text-xs text-[#8B98A5] mt-6">Demo: engineer@demo.forgesight / admin@demo.forgesight · <span className="mono">forgesight-demo</span></p>
+      <p className="text-xs text-[#8B98A5] mt-6">Demo: engineer@demo.forgesight / admin@demo.forgesight · password <span className="mono">forgesight-demo</span></p>
     </div>
   );
 }
 
-function Field({ label, type, value, onChange }: { label: string; type: string; value: string; onChange: (v: string) => void }) {
+function Field({ label, type, value, onChange, error }:
+  { label: string; type: string; value: string; onChange: (v: string) => void; error?: string }) {
   return (
     <label className="block">
       <span className="text-xs text-[#8B98A5]">{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required
-        className="mt-1 w-full bg-[#0E1116] border border-[#232B35] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4A90D9]" />
+        aria-invalid={error ? "true" : undefined}
+        className={`mt-1 w-full bg-[#0E1116] border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4A90D9] ${error ? "border-[#E5484D]" : "border-[#232B35]"}`} />
+      {error && <span className="text-xs text-[#E5484D] mt-1 block">{error}</span>}
     </label>
   );
 }

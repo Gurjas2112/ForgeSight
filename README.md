@@ -62,6 +62,9 @@ human-in-the-loop — so a judge (or a plant) can verify *why* every recommendat
   allow/deny is timestamped in the audit log.
 - **Feedback loop (FR-6)** — 👍/👎/"this fixed it" re-ranks retrieval, injects engineer-verified
   exemplars, and flips records to verified.
+- **Global copilot widget** — a fixed-position, fixed-height floating copilot available on every page;
+  the conversation scrolls internally (the page never grows). Per-user **conversation history with
+  timestamps** is persisted server-side and restorable from a history switcher (`GET /chat/sessions`).
 
 ### Dashboard modules (live backend data)
 Tabbed within the dashboard so the **Overview → equipment → copilot** workflow stays intact:
@@ -76,6 +79,10 @@ Tabbed within the dashboard so the **Overview → equipment → copilot** workfl
 - **Reliability** — predictive curves, failure probability, RUL forecast, trend analysis.
 - **Leadership** — shutdown vs potential-failure cost, expected savings, ROI, confidence,
   recommended action.
+- **Admin** (admin-only) — a system-metrics console: accounts by role, conversations & messages,
+  knowledge-corpus size, work orders by status, governance-audit activity (24h), open alerts, plant
+  availability and feedback — every value a live DB aggregate (`GET /admin/metrics`), plus the live
+  model scorecard, an accounts roster and a recent-audit feed.
 
 ### Prediction & alerting
 - **Real-time scheduler** re-scans equipment health → raises severity-ranked alerts (`/alerts`).
@@ -138,7 +145,7 @@ Links per technology: [`generated_app_diagrams/assets/tech_stack_links.json`](ge
 ## 🤖 ML models
 
 Each model ships a Kaggle-style `test.csv` → `submission.csv` and is surfaced as a **live held-out
-inference** via `GET /models/scorecard`. See [`ml/README.md`](ml/README.md).
+inference** via `GET /models/scorecard`. See [`ml/Ml_workflow.md`](ml/Ml_workflow.md).
 
 | Model | Dataset | Algorithm | Headline metric |
 |---|---|---|---|
@@ -149,8 +156,11 @@ inference** via `GET /models/scorecard`. See [`ml/README.md`](ml/README.md).
 | azure_pdm | Azure PdM | XGBoost (24h-ahead) | PR-AUC 0.90 · recall 0.92 |
 
 **Fine-tune (hybrid serving):** QLoRA on Qwen2.5-3B (Unsloth, Colab T4) → GGUF → `ollama create
-qwen-forgesight`; on-prem serves the fine-tuned model, the public demo uses the Groq fallback (no
-cloud GPU). Base Qwen is the gated, safe fallback. See [`docs/finetune.md`](docs/finetune.md).
+qwen-forgesight`. The exported GGUF (`finetune/export/qwen-forgesight.Q4_K_M.gguf`) is **verified
+deployable** locally — `ollama create` + a JSON smoke prompt succeed — and is promoted
+(`OLLAMA_MODEL=qwen-forgesight`) only if it beats base on citation compliance + number fidelity. On-prem
+serves the fine-tuned model; the public demo uses the Groq fallback (Railway has no GPU). Base Qwen is
+the gated, safe default. See [`finetune/finetuning_workflow.md`](finetune/finetuning_workflow.md).
 
 ---
 
@@ -265,8 +275,12 @@ Details: [`docs/assumptions_limitations.md`](docs/assumptions_limitations.md).
 Secrets live only in `.env` (gitignored); `.env.example` is the redacted template. Any credential
 that appeared in earlier drafts (`SUPABASE_JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`,
 `SUPABASE_ANON_KEY`, API keys) should be treated as **compromised and rotated** before real use.
-Public signup is **engineer-only**; admin accounts are provisioned by an administrator. Backend JWT
-verification is the enforced boundary on every request.
+Public signup is **engineer-only**; admin accounts are provisioned by an administrator, and a
+self-assigned admin request is downgraded and audited. Signup is validated on both client and server
+(RFC email via pydantic `EmailStr`; password ≥8 chars with a letter + a number; duplicate emails return
+a clean 409). Backend JWT verification is the enforced boundary on every request; chat-session reads are
+filtered to the owner (admins excepted). Email-confirmation (SMTP) is deferred — demo accounts are
+pre-confirmed.
 
 ---
 

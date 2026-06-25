@@ -157,3 +157,29 @@ export interface LogbookEntry {
   id: string; equipment_id: string; author_type: string;
   entry_type: string; content: Record<string, unknown>; created_at: string;
 }
+
+export interface AdminMetrics {
+  accounts: { total: number; by_role: Record<string, number> };
+  knowledge: { equipment: number; doc_chunks: number; spares: number; breakdown_records: number };
+  conversations: { sessions: number; messages: number; active_24h: number };
+  feedback: { total: number; by_verdict: Record<string, number> };
+  work_orders: { total: number; by_status: Record<string, number> };
+  governance: { audit_events_total: number; audit_events_24h: number; denied_24h: number };
+  alerts: { open: number };
+  plant: PlantSummary;
+}
+
+export interface AdminUser { id: string; full_name: string | null; role: string; area: string | null; }
+export interface AuditEvent {
+  agent_name: string | null; action: string | null; resource: string | null;
+  allowed: boolean | null; reason: string | null; ts: string;
+}
+
+export interface ChatSessionSummary {
+  id: string; title: string | null; equipment_id: string | null;
+  updated_at: string; message_count: number;
+}
+export interface ChatHistoryMessage {
+  role: "user" | "assistant" | "agent_event";
+  content: string | null; card: Card | null; agent_name: string | null; created_at: string;
+}
