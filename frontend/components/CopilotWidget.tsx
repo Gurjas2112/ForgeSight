@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Send, X, Bot, ChevronRight, History, Plus, MessageSquare } from "lucide-react";
 import { postApprove, postChat, getChatSessions, getChatMessages } from "@/lib/api";
 import { authConfigured } from "@/lib/supabase";
@@ -24,6 +25,7 @@ function fmtTime(ts?: string): string {
  *  Restores per-user conversation history (with timestamps) from the backend. */
 export function CopilotWidget() {
   const { session, email, loading } = useAuth();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -104,6 +106,9 @@ export function CopilotWidget() {
   // render only for authenticated users (or local demo where auth isn't configured)
   if (loading) return null;
   if (authConfigured() && !session) return null;
+  // equipment detail pages have their own contextual, equipment-scoped copilot sidebar —
+  // suppress the global widget there so only one copilot shows per page.
+  if (pathname?.startsWith("/equipment/")) return null;
 
   if (!open) {
     return (
