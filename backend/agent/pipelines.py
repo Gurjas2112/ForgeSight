@@ -134,19 +134,36 @@ def make_reliability_pipeline(authority: AgentAuthority, pool) -> RunnableLambda
         user, eq = state["user"], state.get("equipment_id")
         deleg, cites, tr = [], [], {}
         with pool.connection() as conn:
-            tr["_equipment"] = _equipment_row(conn, eq)
+            row = _equipment_row(conn, eq)
+            tr["_equipment"] = row
+            if row is None:
+                # No specific asset (e.g. asked from the global copilot with no context, or an
+                # unknown id) → don't call equipment-scoped ML tools with an empty id. Record a note
+                # and let synthesis ask which asset / emit a no_evidence card instead of crashing.
+                tr["_note"] = "no_equipment"
+                deleg.append(DelegationEvent(
+                    agent=agent, text="no specific equipment identified — an asset is needed to assess health/RUL"))
+                return {"delegations": deleg, "citations": cites, "tool_results": tr,
+                        "consumed": Budget(tool_calls=0)}
+
             authority.check_tool(agent, "check_equipment_health", ActionClass.READ, user)
             authority.check_budget(agent, state.get("consumed") or Budget())
-            health = check_equipment_health(conn, eq or "")
-            tr["check_equipment_health"] = health.model_dump()
-            cites.append(Citation(kind="model_output", ref="IsolationForest anomaly scan"))
-            deleg.append(DelegationEvent(agent=agent, text=f"scanning health (score {health.anomaly_score})…"))
+            try:
+                health = check_equipment_health(conn, eq or "")
+                tr["check_equipment_health"] = health.model_dump()
+                cites.append(Citation(kind="model_output", ref="IsolationForest anomaly scan"))
+                deleg.append(DelegationEvent(agent=agent, text=f"scanning health (score {health.anomaly_score})…"))
+            except Exception as e:  # noqa: BLE001 — insufficient data → recorded note, not a crash
+                tr["check_equipment_health_error"] = str(e)
 
             authority.check_tool(agent, "estimate_rul", ActionClass.READ, user)
-            rul = estimate_rul(conn, eq or "")
-            tr["estimate_rul"] = rul.model_dump()
-            cites.append(Citation(kind="trend", ref=f"{eq} vibration trend → {rul.target_limit_mm_s} mm/s"))
-            deleg.append(DelegationEvent(agent=agent, text=f"projecting RUL ≈ {rul.rul_days} d…"))
+            try:
+                rul = estimate_rul(conn, eq or "")
+                tr["estimate_rul"] = rul.model_dump()
+                cites.append(Citation(kind="trend", ref=f"{eq} vibration trend → {rul.target_limit_mm_s} mm/s"))
+                deleg.append(DelegationEvent(agent=agent, text=f"projecting RUL ≈ {rul.rul_days} d…"))
+            except Exception as e:  # noqa: BLE001
+                tr["estimate_rul_error"] = str(e)
         return {"delegations": deleg, "citations": cites, "tool_results": tr,
                 "consumed": Budget(tool_calls=2)}
 

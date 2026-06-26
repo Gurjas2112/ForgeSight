@@ -363,10 +363,16 @@ class AgentController:
         return {"cache_hit": hit}
 
     def classify_intent(self, state: ForgeState) -> dict:
-        intent, query_class = self.llm.classify(_last_user_text(state),
-                                                state.get("equipment_id"))
-        return {"intent": intent, "query_class": query_class,
-                "target_agents": INTENT_AGENT_MAP.get(intent, ["diagnostic_agent"])}
+        text = _last_user_text(state)
+        # If the caller gave no equipment (e.g. the global copilot), try to resolve one from the
+        # text so asset questions return real cards instead of always degrading.
+        eq = state.get("equipment_id") or _resolve_equipment_from_text(text)
+        intent, query_class = self.llm.classify(text, eq)
+        out = {"intent": intent, "query_class": query_class,
+               "target_agents": INTENT_AGENT_MAP.get(intent, ["diagnostic_agent"])}
+        if eq and not state.get("equipment_id"):
+            out["equipment_id"] = eq
+        return out
 
     def synthesize(self, state: ForgeState) -> dict:
         # §1.7b analytical queries: the SqlCard is assembled DETERMINISTICALLY from the
@@ -489,11 +495,19 @@ class AgentController:
         except AuthorityError as e:
             return {"draft_card": {"card_type": "denied",
                                    "message": f"Action not permitted: {e}"}}
-        except Exception:  # noqa: BLE001 — live failure mid-turn → golden fallback, never a 500
+        except Exception as e:  # noqa: BLE001 — ANY mid-turn failure degrades to an honest card, never a 500
+            print(f"  [controller] turn failed, degrading (non-fatal): {e}")
             fb = self._error_fallback(inputs)
             if fb is not None:
                 return fb
-            raise
+            # Universal safety net: a failure in any node (agent/tool/synthesis/guardrail) for ANY
+            # input still terminates in a degraded card rather than a 500.
+            try:
+                state = self.graph.get_state(config).values
+            except Exception:  # noqa: BLE001
+                state = dict(inputs)
+            return {**state, "draft_card": self.guards.degraded_card(state),
+                    "guard_report": GuardReport(passed=True, degraded=True)}
 
     def _error_fallback(self, inputs: dict) -> dict | None:
         """Error/timeout fallback ONLY: if the live governed turn fails, serve the pre-baked
@@ -535,6 +549,44 @@ def _equipment_exists(equipment_id: str) -> bool:
             return cur.fetchone() is not None
     except Exception:  # noqa: BLE001
         return True
+
+
+_EQUIPMENT_ALIASES = {
+    "f3": "hsm-f3-stand", "f3 stand": "hsm-f3-stand", "hot strip mill": "hsm-f3-stand",
+    "sinter fan 2": "sinter-fan-2", "sinter fan #2": "sinter-fan-2", "id fan 2": "sinter-fan-2",
+    "sinter fan 1": "sinter-fan-1", "sinter fan #1": "sinter-fan-1", "id fan 1": "sinter-fan-1",
+    "caster": "caster-1", "continuous caster": "caster-1",
+    "blast furnace stove": "bf-stove-a", "stove a": "bf-stove-a", "bf stove": "bf-stove-a",
+    "ladle crane": "ladle-crane-4", "crane 4": "ladle-crane-4", "ladle crane 4": "ladle-crane-4",
+}
+
+
+def _resolve_equipment_from_text(text: str) -> str | None:
+    """Best-effort map of free text → a known equipment id, so asset questions asked from the
+    global copilot (which sends no equipment_id) still resolve. Conservative: returns a hit only on
+    an exact id, a known alias, or a UNIQUE name substring; otherwise None (caller leaves it unset
+    and the pipeline degrades gracefully). Never raises."""
+    if not text:
+        return None
+    t = " ".join(text.lower().split())
+    try:
+        from backend.db.connection import get_pool
+        with get_pool().connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT id, name FROM equipment")
+            rows = cur.fetchall()
+    except Exception:  # noqa: BLE001
+        return None
+    ids = {r[0] for r in rows}
+    for eid, _ in rows:                                   # 1) exact equipment id mentioned
+        if eid.lower() in t:
+            return eid
+    for alias, eid in _EQUIPMENT_ALIASES.items():         # 2) known alias
+        if alias in t and eid in ids:
+            return eid
+    name_hits = [eid for eid, name in rows if name and name.lower() in t]
+    if len(name_hits) == 1:                               # 3) unique full-name substring
+        return name_hits[0]
+    return None
 
 
 def _safe_dump(v: Any) -> Any:

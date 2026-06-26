@@ -271,8 +271,16 @@ def chat(body: ChatIn, user: AuthUser = Depends(current_user)) -> dict:
         "repair_attempted": False,
     }
     config = {"configurable": {"thread_id": session_id}, "recursion_limit": 25}
-    result = controller.invoke(inputs, config)
-    out = _serialize(result)
+    try:
+        result = controller.invoke(inputs, config)
+        out = _serialize(result)
+    except Exception as e:  # noqa: BLE001 — final backstop: never surface a 500 to the UI
+        print(f"  [chat] turn failed, returning degraded card (non-fatal): {e}")
+        out = {"card": {"card_type": "degraded",
+                        "message": "Something went wrong handling that request. Please try "
+                                   "rephrasing, or name the specific equipment."},
+               "delegations": [], "citations": [], "intent": None,
+               "query_class": None, "pending_action": None, "awaiting_approval": False}
     out["session_id"] = session_id
     return out
 
