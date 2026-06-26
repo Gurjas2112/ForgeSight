@@ -27,6 +27,11 @@ function Overview() {
     getPlantSummary().then(setSummary).catch(() => {});
   }, []);
 
+  // Safety net: collapse identical alerts (same asset + severity) so a perpetually-anomalous
+  // asset can't repeat the same row down the feed even if the API ever returns duplicates.
+  const dedupedAlerts = alerts.filter((a, i) =>
+    alerts.findIndex((b) => b.equipment_id === a.equipment_id && b.severity === a.severity) === i);
+
   const availability = summary ? `${summary.availability_pct}%` : "—";
   const openAlerts = summary ? summary.open_alerts : alerts.length;
   const downtimeAtRisk = summary ? summary.downtime_at_risk_label : "—";
@@ -84,11 +89,11 @@ function Overview() {
         })}
       </div>
 
-      {alerts.length > 0 && (
+      {dedupedAlerts.length > 0 && (
         <div className="mt-6">
           <h2 className="text-sm font-medium mb-2 text-[#8B98A5]">Live alert feed</h2>
           <div className="space-y-1.5">
-            {alerts.map((a) => (
+            {dedupedAlerts.map((a) => (
               <Link key={a.id} href={`/equipment/${a.equipment_id}`} className="panel p-3 flex items-center gap-2 text-sm hover:border-[#4A90D9]">
                 <AlertTriangle size={15} className="text-[#FF6A2B]" />
                 <span className="flex-1">{a.title}</span>

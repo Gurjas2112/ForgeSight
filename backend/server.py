@@ -421,11 +421,15 @@ def models_scorecard() -> dict:
 
 @app.get("/alerts")
 def alerts() -> list[dict]:
+    # One row per asset (its latest alert) so a perpetually-anomalous asset doesn't fill the
+    # feed with identical rows; re-sort newest-first in Python and cap the feed at 20.
     with STATE["pool"].connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id, equipment_id, severity, title, created_at FROM alerts "
-                    "ORDER BY created_at DESC LIMIT 20")
-        return [{"id": str(r[0]), "equipment_id": r[1], "severity": r[2], "title": r[3],
+        cur.execute("SELECT DISTINCT ON (equipment_id) id, equipment_id, severity, title, created_at "
+                    "FROM alerts ORDER BY equipment_id, created_at DESC")
+        rows = [{"id": str(r[0]), "equipment_id": r[1], "severity": r[2], "title": r[3],
                  "created_at": str(r[4])} for r in cur.fetchall()]
+    rows.sort(key=lambda a: a["created_at"], reverse=True)
+    return rows[:20]
 
 
 @app.get("/plant/summary")

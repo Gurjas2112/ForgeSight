@@ -64,14 +64,20 @@ def scan_once() -> int:
                 title = (f"{sev.upper()} — {eq}: anomaly {health.anomaly_score}, "
                          f"RUL ≈ {rul.rul_days}d (lead {lead}d)")
                 with conn.cursor() as cur:
+                    # Only raise a new alert when an identical one isn't already open — otherwise
+                    # a perpetually-anomalous asset floods the feed with duplicate rows each scan.
                     cur.execute(
                         "INSERT INTO alerts (equipment_id, severity, title, detail, target_role) "
-                        "VALUES (%s,%s,%s,%s::jsonb,'engineer')",
+                        "SELECT %s,%s,%s,%s::jsonb,'engineer' "
+                        "WHERE NOT EXISTS (SELECT 1 FROM alerts "
+                        "WHERE equipment_id=%s AND severity=%s AND acked_at IS NULL)",
                         (eq, sev, title, json.dumps({
                             "anomaly_score": health.anomaly_score, "rul_days": rul.rul_days,
-                            "current_mm_s": rul.current_vibration_mm_s, "lead_time_days": lead})))
-                n_alerts += 1
-                print(f"  [alert:{sev}] {title}")
+                            "current_mm_s": rul.current_vibration_mm_s, "lead_time_days": lead}),
+                         eq, sev))
+                    if cur.rowcount:
+                        n_alerts += 1
+                        print(f"  [alert:{sev}] {title}")
     print(f"scan complete · {n_alerts} alert(s) raised")
     return n_alerts
 
