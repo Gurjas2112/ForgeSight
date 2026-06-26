@@ -107,6 +107,7 @@ reproducible and auditable.
 | `GET /admin/metrics` | Live aggregates: accounts by role, knowledge corpus, conversations, feedback, work orders, governance audit (24h), open alerts, plant KPI. |
 | `GET /admin/users` | Account roster from `profiles`. |
 | `GET /admin/audit` | Recent governance audit trail (allow/deny). |
+| `GET /admin/llm-usage` | LLM token-usage detail: daily token/cache series + per-call-type breakdown. |
 
 **Operations & dashboard** (all `current_user`)
 
@@ -144,6 +145,14 @@ Selected by `SYNTHESIS_BACKEND` in `.env`:
   (`llama-3.3-70b-versatile`) by default. The public demo runs this path.
 
 `/healthz` reports the active backend + model so the serving path is always observable.
+
+**Token metering + response cache** ([synthesis.py](agent/synthesis.py)): every classify/synthesize/
+repair call is dispatched through `_chat_json`, which first checks a persistent **`llm_cache`**
+(keyed by `sha256(backend|model|system|user)`). A hit returns the stored card for **0 tokens**; a miss
+calls the model, records prompt/completion/total tokens in **`llm_usage`**, and stores the response.
+Both are best-effort (pool-gated) — a DB hiccup just means uncached/unmetered, never a failed turn.
+The admin endpoints aggregate these into the token-usage monitor. Because the cache key includes the
+full prompt (which embeds live numbers), changed data correctly misses the cache (no stale answers).
 
 ---
 

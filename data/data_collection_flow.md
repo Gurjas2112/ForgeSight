@@ -65,11 +65,26 @@ Deterministic (`seed=42`) so the twin and demo are reproducible.
 4. **Output:** `corpus_ingest.sql` — `INSERT` statements into `doc_chunks` (applied by
    `backend/db/apply_migrations.py`).
 
-Current corpus: **~56 doc_chunks** (23 breakdown records + 6 SOPs + 15 OEM fault-code rows).
+**Real OEM PDFs (ingested):** `data/synthetic/manuals/` holds the actual manufacturer manuals,
+fetched live and parsed with PyMuPDF into `doc_type='manual'` chunks:
+
+| File (stem) | Source | Maps to |
+|---|---|---|
+| `abb_acs880.pdf` | ABB ACS880 primary control firmware manual (VFD) | `hsm-f3-stand` |
+| `skf_22230.pdf` | SKF Bearing Maintenance Handbook | `sinter-fan-2` |
+| `fan_om.pdf` | Centrifugal Fan Installation/Operation/Maintenance manual | `sinter-fan-2` |
+
+The PDFs are **gitignored** (large binaries) but their parsed content lives in `doc_chunks`. Current
+corpus: **~390 doc_chunks** (349 real manual chunks + 23 breakdown records + 18 SOP procedures). `--max-pages`
+/ `--max-manual-chunks` cap very large handbooks so the ingest stays a sane size.
 
 ```bash
+# 1) fetch the OEM PDFs into data/synthetic/manuals/  (abb_acs880.pdf, skf_22230.pdf, fan_om.pdf)
+# 2) chunk + embed (nomic-embed-text via Ollama) → corpus_ingest.sql
 uv run python data/corpus/seed_corpus.py \
-  --pdf-dir data/synthetic/manuals --out-sql data/corpus/corpus_ingest.sql
+  --pdf-dir data/synthetic/manuals --out-sql data/corpus/corpus_ingest.sql \
+  --max-pages 80 --max-manual-chunks 150
+# 3) apply to the DB (psql $DATABASE_URL -f corpus_ingest.sql, or backend/db/apply_migrations.py)
 ```
 
 Retrieval is hybrid (vector + full-text) via `backend/tools/rag.py`; it degrades to full-text-primary

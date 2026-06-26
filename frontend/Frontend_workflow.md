@@ -59,10 +59,12 @@ are for UX, the server is the source of truth.
 
 `app/dashboard/admin/page.tsx` is gated two ways: an **Admin** tab appears in
 [`components/DashboardTabs.tsx`](components/DashboardTabs.tsx) only when `role === "admin"`, and the
-page itself redirects non-admins to `/dashboard`. It fetches `GET /admin/metrics|users|audit` and
-renders live stat cards (accounts, conversations, knowledge corpus, work orders, governance audit, open
-alerts, plant availability, feedback), the live model scorecard, an accounts table, and a recent-audit
-feed. Every value is a live DB aggregate — nothing is hardcoded.
+page itself redirects non-admins to `/dashboard`. It fetches `GET /admin/metrics|users|audit|llm-usage`
+and renders live stat cards (accounts, conversations, knowledge corpus, work orders, governance audit,
+open alerts, plant availability, feedback), an **LLM token-usage monitor** (tokens, cache hit-rate,
+estimated cost, a 14-day token bar chart via Recharts, and a per-call-type breakdown), the live model
+scorecard, an accounts table, and a recent-audit feed. Every value is a live DB aggregate — nothing is
+hardcoded.
 
 ---
 

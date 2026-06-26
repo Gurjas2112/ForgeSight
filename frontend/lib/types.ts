@@ -158,6 +158,13 @@ export interface LogbookEntry {
   entry_type: string; content: Record<string, unknown>; created_at: string;
 }
 
+export interface LlmUsage {
+  backend: string; model: string;
+  calls: number; cached_calls: number; cache_hit_rate: number; cache_entries: number;
+  prompt_tokens: number; completion_tokens: number; total_tokens: number;
+  tokens_24h: number; est_cost_usd: number;
+}
+
 export interface AdminMetrics {
   accounts: { total: number; by_role: Record<string, number> };
   knowledge: { equipment: number; doc_chunks: number; spares: number; breakdown_records: number };
@@ -166,7 +173,13 @@ export interface AdminMetrics {
   work_orders: { total: number; by_status: Record<string, number> };
   governance: { audit_events_total: number; audit_events_24h: number; denied_24h: number };
   alerts: { open: number };
+  llm: LlmUsage;
   plant: PlantSummary;
+}
+
+export interface LlmUsageDetail {
+  series: { day: string; tokens: number; calls: number; cached: number }[];
+  by_type: { call_type: string; calls: number; tokens: number; cached: number }[];
 }
 
 export interface AdminUser { id: string; full_name: string | null; role: string; area: string | null; }

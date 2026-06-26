@@ -82,7 +82,10 @@ Tabbed within the dashboard so the **Overview → equipment → copilot** workfl
 - **Admin** (admin-only) — a system-metrics console: accounts by role, conversations & messages,
   knowledge-corpus size, work orders by status, governance-audit activity (24h), open alerts, plant
   availability and feedback — every value a live DB aggregate (`GET /admin/metrics`), plus the live
-  model scorecard, an accounts roster and a recent-audit feed.
+  model scorecard, an accounts roster and a recent-audit feed. Also an **LLM token-usage monitor**:
+  prompt/completion/total tokens, a 14-day token chart, per-call-type breakdown, estimated cost, and
+  **cache hit-rate** — backed by a persistent LLM response cache (`llm_cache`) that serves repeat
+  query+evidence for 0 tokens, and a per-call meter (`llm_usage`).
 
 ### Prediction & alerting
 - **Real-time scheduler** re-scans equipment health → raises severity-ranked alerts (`/alerts`).

@@ -416,9 +416,14 @@ def firecrawl_scrape(urls: list[str], equipment_id: str) -> list[Chunk]:
 # 5. PDF LOADING (PyMuPDF) — real OEM manuals
 # ----------------------------------------------------------------------------------
 
-def load_pdf_text(pdf_path: Path) -> str:
+def load_pdf_text(pdf_path: Path, max_pages: int | None = None) -> str:
+    """Extract text from a real OEM PDF. `max_pages` caps very large handbooks (e.g. the
+    14 MB SKF manual) so the ingest stays a sane size — we still capture authentic OEM prose;
+    fault-code exact-match is already covered by the synthetic fault-table chunks."""
     from langchain_community.document_loaders import PyMuPDFLoader
     pages = PyMuPDFLoader(str(pdf_path)).load()
+    if max_pages:
+        pages = pages[:max_pages]
     return "\n".join(p.page_content for p in pages)
 
 
@@ -470,7 +475,8 @@ def emit_sql(chunks: list[Chunk], out_path: Path) -> None:
 # 7. ORCHESTRATION
 # ----------------------------------------------------------------------------------
 
-def build_corpus(pdf_dir: Path | None, out_sql: Path) -> None:
+def build_corpus(pdf_dir: Path | None, out_sql: Path, *,
+                 max_pages: int | None = None, max_manual_chunks: int | None = None) -> None:
     chunks: list[Chunk] = []
 
     # SOPs (synthetic)
@@ -490,17 +496,18 @@ def build_corpus(pdf_dir: Path | None, out_sql: Path) -> None:
 
     # manuals (real PDFs, if provided)
     if pdf_dir and pdf_dir.exists():
-        for pdf in pdf_dir.glob("*.pdf"):
+        for pdf in sorted(pdf_dir.glob("*.pdf")):
             stem = pdf.stem.lower()
             eq, src = next(((e, s) for k, (e, s) in PDF_EQUIPMENT_MAP.items()
                             if k in stem), (None, pdf.stem))
-            print(f"  parsing manual {pdf.name} → {eq}")
-            chunks += chunk_manual(load_pdf_text(pdf), eq, src)
+            mc = chunk_manual(load_pdf_text(pdf, max_pages=max_pages), eq, src)
+            if max_manual_chunks:
+                mc = mc[:max_manual_chunks]
+            print(f"  parsing manual {pdf.name} → {eq} · {len(mc)} chunks")
+            chunks += mc
 
-    # optional HTML knowledge pages
-    chunks += firecrawl_scrape(
-        ["https://example-oem/acs880/fault-codes"],  # replace with real OEM KB URLs
-        "hsm-f3-stand")
+    # optional HTML knowledge pages (only with real OEM KB URLs + FIRECRAWL_API_KEY).
+    # Disabled by default — the real OEM PDFs above are the manual source of truth.
 
     print(f"  total chunks before dedupe: {len(chunks)}")
     emit_sql(chunks, out_sql)
@@ -510,6 +517,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--pdf-dir", type=Path, default=Path("./manuals"))
     ap.add_argument("--out-sql", type=Path, default=Path("./corpus_ingest.sql"))
+    ap.add_argument("--max-pages", type=int, default=None,
+                    help="cap pages read per PDF (large OEM handbooks)")
+    ap.add_argument("--max-manual-chunks", type=int, default=None,
+                    help="cap chunks kept per manual PDF")
     args = ap.parse_args()
-    build_corpus(args.pdf_dir, args.out_sql)
+    build_corpus(args.pdf_dir, args.out_sql,
+                 max_pages=args.max_pages, max_manual_chunks=args.max_manual_chunks)
     print("done. Next: psql $DATABASE_URL -f corpus_ingest.sql")

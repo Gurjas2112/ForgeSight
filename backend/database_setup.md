@@ -64,6 +64,8 @@ connection pool and parameterized SQL. The schema is idempotent and applied by a
 | `logbook` | Shift handover & fix-confirmed entries. |
 | `pending_actions` | HITL COMMIT proposals (status, decided_by, decided_at). |
 | `audit_log` | Every authority allow/deny (+ signup downgrades) with `ts`. |
+| `llm_usage` | Per-LLM-call token meter (backend, model, call_type, prompt/completion/total tokens, `cached`) — powers the admin token-usage monitor. |
+| `llm_cache` | Persistent LLM response cache (key = sha256(backend\|model\|system\|user); `response` jsonb, `hits`) — a hit returns the card for 0 tokens. |
 | `work_orders` | Maintenance tasks (status, priority, assignee, steps). |
 | `reports` · `rejected_readings` | Generated PDFs · sensor-QA quarantine. |
 

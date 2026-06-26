@@ -505,6 +505,26 @@ def admin_metrics(_: AuthUser = Depends(require_admin)) -> dict:
             },
         }
 
+        # LLM token-usage monitor: spend, cache effectiveness, and an estimated cost.
+        cur.execute("SELECT count(*), coalesce(sum(prompt_tokens),0), coalesce(sum(completion_tokens),0), "
+                    "coalesce(sum(total_tokens),0), count(*) FILTER (WHERE cached) FROM llm_usage")
+        calls, ptok, ctok, ttok, cached = (int(x) for x in cur.fetchone())
+        tok_24h = scalar("SELECT coalesce(sum(total_tokens),0) FROM llm_usage "
+                         "WHERE created_at > now() - interval '24 hours'")
+        cache_entries = scalar("SELECT count(*) FROM llm_cache")
+        s = get_settings()
+        active_model = s.ollama_model if s.synthesis_backend == "ollama" else s.llm_model
+        # Groq llama-3.3-70b list price (documented assumption): $0.59 / 1M in, $0.79 / 1M out.
+        est_cost = round(ptok / 1e6 * 0.59 + ctok / 1e6 * 0.79, 4)
+        metrics["llm"] = {
+            "backend": s.synthesis_backend, "model": active_model,
+            "calls": calls, "cached_calls": cached,
+            "cache_hit_rate": round(cached / calls, 3) if calls else 0.0,
+            "cache_entries": cache_entries,
+            "prompt_tokens": ptok, "completion_tokens": ctok, "total_tokens": ttok,
+            "tokens_24h": tok_24h, "est_cost_usd": est_cost,
+        }
+
         # deterministic plant KPI header (reuses /plant/summary's compute path)
         cur.execute("SELECT e.id, e.criticality, h.is_anomalous, h.rul_days "
                     "FROM equipment e LEFT JOIN equipment_health h ON h.equipment_id=e.id")
@@ -538,6 +558,25 @@ def admin_audit(limit: int = 50, _: AuthUser = Depends(require_admin)) -> list[d
                     "FROM audit_log ORDER BY ts DESC LIMIT %s", (limit,))
         return [{"agent_name": r[0], "action": r[1], "resource": r[2], "allowed": r[3],
                  "reason": r[4], "ts": str(r[5])} for r in cur.fetchall()]
+
+
+@app.get("/admin/llm-usage")
+def admin_llm_usage(days: int = 14, _: AuthUser = Depends(require_admin)) -> dict:
+    """Admin-only LLM token-usage detail: a daily token/cache series + a per-call-type breakdown."""
+    days = max(1, min(days, 90))
+    with STATE["pool"].connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT date_trunc('day', created_at)::date AS d, "
+            "coalesce(sum(total_tokens),0), count(*), count(*) FILTER (WHERE cached) "
+            "FROM llm_usage WHERE created_at > now() - make_interval(days => %s) "
+            "GROUP BY d ORDER BY d", (days,))
+        series = [{"day": str(r[0]), "tokens": int(r[1]), "calls": int(r[2]), "cached": int(r[3])}
+                  for r in cur.fetchall()]
+        cur.execute("SELECT call_type, count(*), coalesce(sum(total_tokens),0), count(*) FILTER (WHERE cached) "
+                    "FROM llm_usage GROUP BY call_type ORDER BY 3 DESC")
+        by_type = [{"call_type": r[0], "calls": int(r[1]), "tokens": int(r[2]), "cached": int(r[3])}
+                   for r in cur.fetchall()]
+    return {"series": series, "by_type": by_type}
 
 
 # ---------------- dashboard modules ----------------

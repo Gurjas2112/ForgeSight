@@ -1,7 +1,7 @@
 import type {
   AdminMetrics, AdminUser, Alert, AuditEvent, ChatHistoryMessage, ChatResponse,
   ChatSessionSummary, Equipment, EquipmentContext, EquipmentDetail,
-  Incident, LeadershipROI, LogbookEntry, OptimizerResult, PlantSummary,
+  Incident, LeadershipROI, LlmUsageDetail, LogbookEntry, OptimizerResult, PlantSummary,
   ReliabilityData, Scorecard, SearchItem, SpareCatalogItem, WorkOrder,
 } from "./types";
 import { getSupabase } from "./supabase";
@@ -143,6 +143,8 @@ export const getAdminUsers = async () =>
   fetch(`${API}/admin/users`, { cache: "no-store", headers: await authHeaders() }).then(j<AdminUser[]>);
 export const getAdminAudit = async (limit = 50) =>
   fetch(`${API}/admin/audit?limit=${limit}`, { cache: "no-store", headers: await authHeaders() }).then(j<AuditEvent[]>);
+export const getAdminLlmUsage = async (days = 14) =>
+  fetch(`${API}/admin/llm-usage?days=${days}`, { cache: "no-store", headers: await authHeaders() }).then(j<LlmUsageDetail>);
 
 // ---- copilot history (per-user; require Bearer token) ----
 export const getChatSessions = async () =>

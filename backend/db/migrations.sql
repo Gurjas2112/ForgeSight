@@ -197,6 +197,30 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts DESC);
 
+-- LLM observability: per-call token usage (admin token-usage monitor) + response cache.
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id                bigserial PRIMARY KEY,
+    backend           text,            -- 'ollama' | 'hosted'
+    model             text,
+    call_type         text,            -- 'classify' | 'synthesize' | 'repair'
+    prompt_tokens     int  DEFAULT 0,
+    completion_tokens int  DEFAULT 0,
+    total_tokens      int  DEFAULT 0,
+    cached            boolean DEFAULT false,
+    created_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_ts ON llm_usage(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS llm_cache (
+    cache_key   text PRIMARY KEY,      -- sha256(backend|model|system|user)
+    response    jsonb NOT NULL,
+    model       text,
+    call_type   text,
+    hits        int NOT NULL DEFAULT 0,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    last_hit_at timestamptz
+);
+
 CREATE TABLE IF NOT EXISTS pending_actions (
     id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid REFERENCES chat_sessions(id) ON DELETE CASCADE,

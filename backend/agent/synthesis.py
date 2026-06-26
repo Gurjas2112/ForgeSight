@@ -14,6 +14,7 @@ the Pass-1 runtime model (the design's sanctioned fallback until the fine-tune p
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -75,8 +76,9 @@ class OllamaSynthesizer:
     The class name is kept for backwards-compat with build_controller wiring.
     """
 
-    def __init__(self, model: str | None = None, host: str | None = None):
+    def __init__(self, model: str | None = None, host: str | None = None, pool=None):
         s = get_settings()
+        self._pool = pool                 # for token-usage logging + LLM response cache (None in scripts)
         self._backend = s.synthesis_backend
         if self._backend == "hosted":
             from openai import OpenAI  # lazy: Groq + OpenAI both use this SDK
@@ -98,7 +100,7 @@ class OllamaSynthesizer:
             "sensors), or 'action' (reserve/order/report). Output only JSON."
         )
         user = (f"EQUIPMENT: {equipment_id or '(none)'}\nUSER QUERY: {text}")
-        data = self._chat_json(_CLASSIFY_SCHEMA, sys_msg, user, temperature=0)
+        data = self._chat_json(_CLASSIFY_SCHEMA, sys_msg, user, temperature=0, call_type="classify")
         intent = data.get("intent") if data.get("intent") in INTENTS else "diagnosis"
         qclass = data.get("query_class") if data.get("query_class") in QUERY_CLASSES else "knowledge"
         return intent, qclass
@@ -134,7 +136,7 @@ class OllamaSynthesizer:
             "strings. Copy all numbers from TOOL_RESULTS verbatim. Safety/LOTO steps come FIRST."
         )
         return self._fill(card_model, DIAGNOSTIC_PERSONA, context + instruction,
-                          allowed_refs=allowed)
+                          allowed_refs=allowed, call_type="synthesize")
 
     # ---- T9: repair (retry-once with the violation list as feedback) ------------------
     def synthesize_card_with_errors(self, *, previous: dict, violations: list[str],
@@ -155,11 +157,12 @@ class OllamaSynthesizer:
             f"using ONLY these exact strings: {json.dumps(allowed, ensure_ascii=False)}. "
             "Copy numbers from TOOL_RESULTS; LOTO/safety steps first."
         )
-        return self._fill(card_model, DIAGNOSTIC_PERSONA, user, allowed_refs=allowed)
+        return self._fill(card_model, DIAGNOSTIC_PERSONA, user, allowed_refs=allowed,
+                          call_type="repair")
 
     # ---- shared constrained-decode call ----------------------------------------------
     def _fill(self, card_model: type[BaseModel], system: str, user: str,
-              allowed_refs: list[str] | None = None) -> dict:
+              allowed_refs: list[str] | None = None, call_type: str = "synthesize") -> dict:
         schema = card_model.model_json_schema()
         if allowed_refs:
             # Constrained decoding makes citation compliance STRUCTURAL, not advisory: the
@@ -167,25 +170,48 @@ class OllamaSynthesizer:
             # This is the design's "schema-invalid output is impossible" principle applied to
             # the anti-hallucination gate — base Qwen-3B then cannot omit or fabricate a ref.
             schema = _constrain_citation_refs(schema, allowed_refs)
-        data = self._chat_json(schema, system, user, temperature=0.1)
+        data = self._chat_json(schema, system, user, temperature=0.1, call_type=call_type)
         default_ct = getattr(card_model.model_fields.get("card_type"), "default", None)
         if default_ct and not data.get("card_type"):
             data["card_type"] = default_ct
         return data
 
-    # ---- backend-agnostic constrained JSON chat --------------------------------------
-    def _chat_json(self, schema: dict, system: str, user: str, *, temperature: float) -> dict:
-        """One JSON-schema-constrained chat turn, dispatched to the configured backend."""
+    # ---- backend-agnostic constrained JSON chat (with response cache + token metering) ----
+    def _chat_json(self, schema: dict, system: str, user: str, *, temperature: float,
+                   call_type: str = "synthesize") -> dict:
+        """One JSON-schema-constrained chat turn, dispatched to the configured backend.
+
+        A persistent LLM response cache (llm_cache, keyed by backend|model|system|user) is checked
+        first: a hit returns the stored card and spends ZERO tokens. On a miss we call the model,
+        record token usage (llm_usage), and store the response. Both the cache and the meter are
+        best-effort — a DB hiccup never breaks synthesis (it just runs uncached/unmetered)."""
+        key = _cache_key(self._backend, self.model, system, user)
+        cached = self._cache_get(key)
+        if cached:
+            self._record_usage(call_type, 0, 0, 0, cached=True)
+            return cached
+
         if self._backend == "hosted":
-            return self._openai_chat_json(schema, system, user, temperature)
+            data, usage = self._openai_chat_json(schema, system, user, temperature)
+        else:
+            data, usage = self._ollama_chat_json(schema, system, user, temperature)
+
+        self._record_usage(call_type, *usage, cached=False)
+        if data:                                  # never cache an empty/failed parse
+            self._cache_put(key, data, call_type)
+        return data
+
+    def _ollama_chat_json(self, schema, system, user, temperature) -> tuple[dict, tuple[int, int, int]]:
         resp = self._client.chat(
             model=self.model, format=schema, options={"temperature": temperature},
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}],
         )
-        return _loads(resp["message"]["content"])
+        p = int(resp.get("prompt_eval_count") or 0)
+        c = int(resp.get("eval_count") or 0)
+        return _loads(resp["message"]["content"]), (p, c, p + c)
 
-    def _openai_chat_json(self, schema: dict, system: str, user: str, temperature: float) -> dict:
+    def _openai_chat_json(self, schema, system, user, temperature) -> tuple[dict, tuple[int, int, int]]:
         """Hosted API fallback (Groq/OpenAI via OpenAI-compatible SDK). JSON mode + schema-in-prompt;
         the enum-constrained `citation_refs` is described to the model and the downstream
         guardrail still validates ref existence."""
@@ -197,7 +223,54 @@ class OllamaSynthesizer:
             messages=[{"role": "system", "content": sys_msg},
                       {"role": "user", "content": user}],
         )
-        return _loads(resp.choices[0].message.content or "")
+        u = getattr(resp, "usage", None)
+        usage = ((getattr(u, "prompt_tokens", 0) or 0), (getattr(u, "completion_tokens", 0) or 0),
+                 (getattr(u, "total_tokens", 0) or 0)) if u else (0, 0, 0)
+        return _loads(resp.choices[0].message.content or ""), usage
+
+    # ---- token-usage meter + response cache (best-effort, pool-gated) -----------------
+    def _cache_get(self, key: str) -> dict | None:
+        if not self._pool:
+            return None
+        try:
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                cur.execute("UPDATE llm_cache SET hits = hits + 1, last_hit_at = now() "
+                            "WHERE cache_key = %s RETURNING response", (key,))
+                row = cur.fetchone()
+                return row[0] if row else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _cache_put(self, key: str, data: dict, call_type: str) -> None:
+        if not self._pool:
+            return
+        try:
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                cur.execute("INSERT INTO llm_cache (cache_key, response, model, call_type) "
+                            "VALUES (%s, %s::jsonb, %s, %s) ON CONFLICT (cache_key) DO NOTHING",
+                            (key, json.dumps(data, default=str), self.model, call_type))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _record_usage(self, call_type: str, prompt: int, completion: int, total: int,
+                      *, cached: bool) -> None:
+        if not self._pool:
+            return
+        try:
+            with self._pool.connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO llm_usage (backend, model, call_type, prompt_tokens, "
+                    "completion_tokens, total_tokens, cached) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    (self._backend, self.model, call_type, prompt, completion, total, cached))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _cache_key(backend: str, model: str, system: str, user: str) -> str:
+    """Stable key for the LLM response cache. Identical (backend, model, prompt) → same answer,
+    so the same query+evidence is served from cache and spends no tokens; when live numbers in
+    the prompt change, the key changes and the cache correctly misses."""
+    return hashlib.sha256(f"{backend}|{model}|{system}|{user}".encode("utf-8")).hexdigest()
 
 
 def _constrain_citation_refs(schema: dict, allowed: list[str]) -> dict:
