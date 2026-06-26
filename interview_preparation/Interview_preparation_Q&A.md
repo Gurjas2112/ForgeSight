@@ -5,7 +5,7 @@
 **Project:** ForgeSight — a governed, citation-grounded **multi-agent Maintenance Wizard** for steel plants.
 
 > How to use this doc: **Part 0** (strategy) + **Part 1** (project narrative) + the **90-sec pitch** are must-revise.
-> Parts 2–4 are the deep system/coding defense. Parts 5–6 are fundamentals. Part 7 is behavioral. Part 8 is curveballs. **Part 9 is scenario-based / situational judgment** (the "what would you do if…" questions for a manager role). **Part 10 covers business impact, operations, security, and scalability** in Tata Steel's hardware/software reality.
+> Parts 2–4 are the deep system/coding defense. Parts 5–6 are fundamentals. Part 7 is behavioral. Part 8 is curveballs. **Part 9 is scenario-based / situational judgment** (the "what would you do if…" questions for a manager role). **Part 10 covers business impact, operations, security, and scalability** in Tata Steel's hardware/software reality. **Part 11 covers system limitations, company/deployment constraints, and regulations/compliance** (DPDP, Factories Act, IEC 62443, ISO).
 > Every Q&A carries a concrete **> Example** — use it to make answers vivid; for a 20-min panel: lead with impact, speak in the "agents propose, humans commit, everything is cited & audited" frame.
 
 ---
@@ -591,6 +591,71 @@ spec:
 
 ---
 
+# Part 11 — System Limitations, Regulations & Compliance (Tata Steel)
+
+> Owning limitations *builds* credibility — a manager who knows the edges is trusted more than one who oversells. Lead each answer with **the honest limit, then the mitigation, then the path to production**. Knowing the regulatory landscape signals you can ship AI in a regulated heavy-industry setting.
+
+## 11.1 System / technical limitations (own them, with mitigations)
+
+### L1. What are the biggest limitations of ForgeSight as it stands?
+**A.** Four honest ones: (1) the **sensor stream is a physics-shaped simulation**, not a live plant feed; (2) the ML models are validated on **public benchmarks** (C-MAPSS, AI4I, UCI Steel Plates, Azure PdM), so they prove the *method*, not plant-specific accuracy; (3) **RAG only knows what I ingested** — a handful of OEM manuals/SOPs, not Tata Steel's full document estate; (4) the **on-prem SLM needs a GPU** for good latency, which the cloud demo lacks. None of these are architectural dead-ends — each has a clear production path (historian integration, per-asset retraining, corpus expansion, GPU serving).
+> **Example:** I won't claim "94% RUL accuracy on a sinter fan" — I'll say "the RUL *method* hits strong MAE on C-MAPSS run-to-failure; on a real fan I'd retrain on its history and report its own held-out error before trusting it operationally."
+
+### L2. The guardrails reduce hallucination — but can the SLM still be wrong?
+**A.** Yes, and I'd never claim otherwise. Cite-or-refuse makes a *fabricated citation* structurally impossible and constrained decoding guarantees valid JSON, but the model can still (a) pick a **valid-but-suboptimal** citation, or (b) phrase a narrative awkwardly. That's why **tools compute every number** (so the *facts* aren't model-generated), COMMITs are **human-gated**, and the honest-failure path returns `no_evidence` rather than guessing. The residual risk is wording/ranking, not unsafe action or fabricated data.
+> **Example:** worst realistic failure is a card that cites SKF §7.5 when §7.1 was slightly more relevant — caught by the citation-precision metric (Part 9 S9), not a wrong RUL number or an auto-approved work order.
+
+### L3. Where does the system have data/cold-start limitations?
+**A.** **Rare failure modes** are the hard case — if an asset has never failed a certain way, there's no run-to-failure history to learn from and no past breakdown to retrieve. Anomaly detection (unsupervised, learns "normal") partially covers this, but a brand-new asset class is a genuine cold start. Mitigation: lean on **physics/OEM thresholds + anomaly detection** first, then improve as the feedback loop and breakdown records accumulate; transfer-learn from similar assets where possible.
+> **Example:** a newly commissioned caster has thin history, so initially ForgeSight leans on the ABB/SKF manual thresholds and anomaly scores, and gets sharper per-asset as engineers verify the first months of records.
+
+### L4. What are the operational / availability limitations today?
+**A.** The demo is **single-region** (Railway/Vercel/Supabase) with **no productionized DR/HA**, the LLM cache can serve a **stale** answer if a manual changes (mitigated by cache invalidation on corpus re-ingest), and a fully local SLM is **latency-bound by the GPU**. For Tata Steel I'd add replicas + backups + a DR runbook, cache-busting on document updates, and capacity-plan the GPU tier from the token monitor.
+> **Example:** if the SKF handbook is re-ingested with a revised clearance table, I'd invalidate the affected `llm_cache` keys so an old cached card can't keep citing the superseded value.
+
+### L5. Could the feedback loop itself become a limitation (bias)?
+**A.** Yes — if engineers mark a wrong fix as "this fixed it," the system can learn the wrong lesson. So feedback **re-ranks and flags**, it doesn't silently overwrite ground truth; verified records are auditable and reversible, and I'd add a periodic review of feedback-driven changes. It's human-in-the-loop *both* directions — humans correct the AI, but humans can also be wrong, so changes stay traceable.
+
+## 11.2 Company / deployment limitations (Tata Steel reality)
+
+### C1. What makes deploying this at Tata Steel hard in practice?
+**A.** It's a **brownfield** environment: decades-old equipment with **inconsistent sensorization** (not every critical asset is instrumented), heterogeneous **PLC/DCS vendors**, and **data silos** across plants (Jamshedpur, Kalinganagar, NINL, Europe). Add **IT-OT organizational split** (different teams, strict network segmentation), **change-management/skills** (engineers must trust and adopt it), **connectivity** constraints in harsh plant zones, and **OEM data lock-in** (proprietary manual formats). My design choices — decentralized per-plant stacks, config-driven backends, full-text fallback when embeddings aren't available — are partly *answers* to these constraints.
+> **Example:** at a plant where a critical pump has only a basic temperature switch and no vibration sensor, ForgeSight can't predict bearing RUL there — I'd flag the **instrumentation gap** as a prerequisite and run anomaly/threshold logic on what *is* sensed, rather than pretend coverage exists.
+
+### C2. Scenario — "Two plants won't share data with each other or the cloud. Now what?"
+**A.** That's the **decentralized** design's whole point: each plant runs an **independent, on-prem stack** (its own Postgres, SLM, corpus) — no cross-plant data movement and no cloud dependency. What's shared is the **platform** (code, schema, MLOps pipeline, governance), distributed like software, not data. Lessons can be shared as **anonymized patterns/models** through a governed process if policy allows, but the default is full local sovereignty.
+
+## 11.3 Regulations & compliance (heavy-industry + India)
+
+### R1. What regulatory / compliance frameworks would govern this at Tata Steel?
+**A.** Several layers, and the architecture already aligns with the spirit of each:
+- **Data protection — India's DPDP Act 2023** (Digital Personal Data Protection): minimize and protect personal data (engineer accounts) — handled via RLS, least-privilege roles, on-prem option, secret hygiene.
+- **Worker safety — Factories Act 1948 + LOTO + BIS/IS standards**: any maintenance guidance must be **safety-first** — the guardrail enforces **LOTO-first** and human approval before state-changing actions.
+- **OT/ICS security — IEC 62443** (and NIST CSF): zoning, no IT→control write path, audited access (Part 10.3).
+- **Management-system ISO standards**: **27001** (information security), **9001** (quality), **45001** (occupational health & safety), **14001** (environmental), **50001** (energy) — ForgeSight's audit log, traceability, and explainability map directly to their evidence/record-keeping requirements.
+- **Environmental — CPCB / pollution-control norms**: relevant when copilots touch emissions/energy use.
+- **Responsible-AI / model governance** (internal Tata Steel + emerging norms): explainability, auditability, human oversight, bias controls.
+
+### R2. How does ForgeSight concretely support an audit or compliance review?
+**A.** Compliance loves **evidence and traceability**, which is exactly the trust design. Every agent decision (Authority allow/deny), every answer's citations, every COMMIT approval, and every model output is recorded in **`audit_log`** + the chat/agent-event tables — so an auditor can reconstruct *who asked what, what evidence was used, who approved an action, and why*. The **cite-or-refuse** rule means recommendations are always traceable to a source document, satisfying the explainability expectation that black-box AI fails.
+> **Example:** during an ISO 45001 / safety audit, I can show that a "replace bearing" recommendation cited SKF §7.1, that the work order required a named engineer's approval, and that the whole exchange is timestamped in `audit_log` — turning "the AI told us to" into a defensible, sourced record.
+
+### R3. Scenario — "Legal/compliance asks: can you guarantee no personal or plant data leaves India / the plant?"
+**A.** Yes, by design — and that's why the **on-prem SLM** matters for **data residency/sovereignty**. With `SYNTHESIS_BACKEND=ollama` and local retrieval, prompts, manuals, and sensor summaries never leave the plant LAN; Postgres is self-hosted; no third-party LLM API is called. The cloud demo's hosted path is simply disabled for a sovereign deployment. I'd document the data-flow diagram and the disabled egress paths as part of the DPDP/IEC-62443 compliance pack.
+
+> **Compliance-at-a-glance map (memorize):**
+
+| Concern | Framework | ForgeSight mechanism |
+|---|---|---|
+| Personal data | DPDP Act 2023 | RLS, least-privilege roles, on-prem option, secrets gitignored |
+| Worker safety | Factories Act 1948 / LOTO / BIS | LOTO-first guardrail, human gate on COMMITs |
+| OT/ICS security | IEC 62443 / NIST | Purdue zoning, no IT→control write, audited access |
+| Info security / quality | ISO 27001 / 9001 | audit_log, traceability, deterministic tools |
+| Explainability / Responsible AI | Internal + emerging AI norms | cite-or-refuse, evidence drawer, HITL, full audit |
+| Data residency | DPDP / data sovereignty | on-prem SLM + self-hosted DB, disabled cloud egress |
+
+---
+
 ### One-page cheat sheet (glance before the call)
 - **Pitch:** governed multi-agent maintenance copilot → fault code to **auditable, cited fix plan in ~90s**.
 - **Trust:** tools compute, LLM narrates; **cite-or-refuse**; HITL for COMMITs; full audit log; on-prem SLM.
@@ -599,3 +664,4 @@ spec:
 - **Round 1:** 1:40 imbalance · stage/spike/iso features · LGBM+XGB+CatBoost 5-fold · **threshold→Recall=1.0**.
 - **JD hooks:** Agentic · RAG+chunking · prompt-to-template · SLM/fine-tune · PostgreSQL · MLOps · IT-OT · responsible AI.
 - **Manager lenses:** ROI in ₹ (tools compute, not LLM) · IT-OT Purdue zoning + data diode · prompt-injection = data-not-commands + HITL · scale via stateless API + read replicas + cached/batched SLM per plant.
+- **Limits & compliance:** simulated sensors + benchmark-validated models (own it) · brownfield/sensor-gaps + data silos · DPDP 2023 · Factories Act/LOTO · IEC 62443 · ISO 27001/9001/45001 · audit_log + cite-or-refuse = auditable.
