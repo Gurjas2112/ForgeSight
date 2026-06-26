@@ -242,9 +242,13 @@ def _ensure_session(session_id: str, user: AuthUser, equipment_id: str | None, m
     title = (message or "").strip()[:60] or "New conversation"
     try:
         with STATE["pool"].connection() as conn, conn.cursor() as cur:
+            # Resolve user_id via a subquery so a non-existent owner (the demo/anon fallback id,
+            # which isn't a real auth.users row) stores as NULL instead of violating the FK —
+            # the session + messages still persist; only ownership is dropped for anon turns.
             cur.execute(
                 "INSERT INTO chat_sessions (id, user_id, equipment_id, title) "
-                "VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET updated_at = now()",
+                "VALUES (%s, (SELECT id FROM auth.users WHERE id = %s), %s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET updated_at = now()",
                 (session_id, user.id, equipment_id, title))
             cur.execute(
                 "INSERT INTO chat_messages (session_id, role, content) VALUES (%s, 'user', %s)",

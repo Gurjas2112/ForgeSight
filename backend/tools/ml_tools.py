@@ -23,11 +23,19 @@ Narrate-never-compute: these compute the numbers; the SLM only narrates them.
 from __future__ import annotations
 
 import json
+import warnings
 from functools import lru_cache
 from pathlib import Path
 
 import joblib
 import numpy as np
+
+# Models are served on raw numpy arrays / are pickled from an older estimator build — both emit
+# benign UserWarnings that Railway surfaces as red "error" log lines. Predictions are correct;
+# silence the specific noise so the logs stay readable.
+warnings.filterwarnings("ignore", message=r".*does not have valid feature names.*")
+warnings.filterwarnings("ignore", message=r".*serialized model.*")
+warnings.filterwarnings("ignore", message=r".*older version of XGBoost.*")
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
