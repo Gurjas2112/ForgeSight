@@ -38,6 +38,17 @@ The SLM is invoked **only** at `synthesize`/`repair`. It narrates and fills type
 selects tools or computes numbers — those are deterministic pipelines. This is what makes every answer
 reproducible and auditable.
 
+**Equipment resolution:** if the caller sends no `equipment_id` (e.g. the global copilot widget),
+`classify_intent` resolves a known asset from the message text (exact id / alias / unique name) so
+asset questions like *"RUL of sinter-fan-2"* still return real cards; if none resolves, equipment-scoped
+agents degrade gracefully (clarification / `no_evidence`) rather than guessing.
+
+**Never a 500 (honest-failure guarantee):** a governed turn *always* terminates in a card. Any uncaught
+failure in any node — classification, a sub-agent, a tool (DB/ML/RAG/SQL), the SLM, or guardrails — is
+caught by `AgentController.invoke` and converted to an honest `degraded` card; `/chat` adds a final
+try/except backstop. So **any** input (gibberish, off-topic, asset-less, unknown asset, injection,
+oversized) returns HTTP 200 with a sensible card, never an unhandled 500.
+
 ---
 
 ## 2. Governance core (`backend/agent/`)
@@ -165,7 +176,11 @@ full prompt (which embeds live numbers), changed data correctly misses the cache
   copilot widget.
 - **Scheduler** ([`backend/scheduler/health_scan.py`](scheduler/health_scan.py)) — when
   `ENABLE_SCHEDULER=true`, re-scans equipment health every `SCHEDULER_INTERVAL_SECONDS` and raises
-  severity-ranked alerts (FR-7 real-time alerting).
+  severity-ranked alerts (FR-7 real-time alerting). The insert is **de-duplicated** — `INSERT … WHERE
+  NOT EXISTS` skips raising a new alert when an unacked one of the same `equipment_id` + `severity`
+  already exists, so repeated scans don't stack identical rows. `GET /alerts` further returns one row
+  per asset (`SELECT DISTINCT ON (equipment_id) … ORDER BY equipment_id, created_at DESC`), so the live
+  feed shows the latest alert per equipment, not duplicates.
 
 ---
 

@@ -57,6 +57,8 @@ human-in-the-loop — so a judge (or a plant) can verify *why* every recommendat
 | **Analyst** | governed text-to-SQL result | `query_records` (SELECT-only, curated views) |
 
 - **Cite-or-refuse** — a code-level guardrail makes a fabricated citation structurally impossible.
+- **Never crashes (honest-failure)** — a governed turn always ends in a typed card; any failure in any
+  node degrades to an honest `degraded`/`no_evidence` card, so **any** input returns 200, never a 500.
 - **Evidence drawer** — every citation chip resolves to the exact source excerpt (`/evidence`).
 - **HITL** — COMMIT actions (e.g. reserve a spare) require explicit engineer approval; every
   allow/deny is timestamped in the audit log.
